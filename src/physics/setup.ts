@@ -158,6 +158,17 @@ export function orbitalPeriods(config: SystemConfig): number[] {
 }
 
 /**
+ * A characteristic orbital period (years) for every body, in `buildBodies` order. The first star has no
+ * orbit of its own, so it gets the second star's period, or else the longest planet's (the star's wobble).
+ */
+export function bodyPeriods(config: SystemConfig): number[] {
+  const periods = orbitalPeriods(config)
+  const nStars = config.stars.length
+  const first = nStars > 1 ? periods[0] : Math.max(1, ...periods)
+  return [first, ...periods]
+}
+
+/**
  * A time step resolving the shortest orbit with ~`stepsPerOrbit` steps. Eccentric orbits move fastest
  * at periapsis, so the step is shrunk by (1 − e)^1.5 for the most eccentric planet.
  */

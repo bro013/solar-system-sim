@@ -20,7 +20,7 @@ const star = (s: Partial<StarConfig> & Pick<StarConfig, 'name' | 'mass' | 'radiu
 
 export const PRESETS: Preset[] = [
   {
-    name: 'Sun to Jupiter',
+    name: 'Solar System (Sun to Neptune)',
     config: {
       stars: [star({ name: 'Sun', mass: 1, radius: 1 })],
       planets: [
@@ -29,6 +29,9 @@ export const PRESETS: Preset[] = [
         planet({ name: 'Earth', mass: 1, radius: 1, distance: 1, eccentricity: 0.017, angle: 103 }),
         planet({ name: 'Mars', mass: 0.107, radius: 0.532, distance: 1.524, eccentricity: 0.093, angle: 336 }),
         planet({ name: 'Jupiter', mass: 317.8, radius: 11.21, distance: 5.203, eccentricity: 0.049, angle: 14 }),
+        planet({ name: 'Saturn', mass: 95.16, radius: 9.45, distance: 9.537, eccentricity: 0.057, angle: 92 }),
+        planet({ name: 'Uranus', mass: 14.54, radius: 4.007, distance: 19.19, eccentricity: 0.046, angle: 170 }),
+        planet({ name: 'Neptune', mass: 17.15, radius: 3.883, distance: 30.07, eccentricity: 0.011, angle: 44 }),
       ],
     },
   },

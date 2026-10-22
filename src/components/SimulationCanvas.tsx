@@ -116,23 +116,23 @@ export function SimulationCanvas(props: Props) {
       const sy = (y: number) => (h + TOP_INSET) / 2 - (y - origin[1] - cy) * scale
 
       if (p.showTrails) {
-        // Trails are drawn relative to the followed body's own trail, aligned from the newest point.
-        const ref = fi >= 0 ? sim.trails.get(info[fi].id) : undefined
+        // When following a body, trails are drawn relative to it, then placed around its current position.
+        const refId = fi >= 0 ? info[fi].id : null
         ctx.lineWidth = 1
+        ctx.globalAlpha = 0.45
         for (let i = 0; i < n; i++) {
-          const t = sim.trails.get(info[i].id)
-          if (!t || t.length < 4) continue
-          const len = ref ? Math.min(t.length, ref.length) : t.length
-          const to = t.length - len, ro = ref ? ref.length - len : 0
           ctx.strokeStyle = info[i].color
-          ctx.globalAlpha = 0.45
           ctx.beginPath()
-          for (let k = 0; k < len; k += 2) {
-            const x = t[to + k] - (ref ? ref[ro + k] - origin[0] : 0)
-            const y = t[to + k + 1] - (ref ? ref[ro + k + 1] - origin[1] : 0)
-            if (k === 0) ctx.moveTo(sx(x), sy(y))
+          let first = true
+          sim.forEachTrailPoint(info[i].id, refId, (x, y) => {
+            if (refId !== null) {
+              x += origin[0]
+              y += origin[1]
+            }
+            if (first) ctx.moveTo(sx(x), sy(y))
             else ctx.lineTo(sx(x), sy(y))
-          }
+            first = false
+          })
           ctx.stroke()
         }
         ctx.globalAlpha = 1
