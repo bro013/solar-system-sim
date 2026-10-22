@@ -50,7 +50,7 @@ export function SimulationCanvas(props: ViewProps) {
     const fit = (sim: Simulation, origin: [number, number], w: number, h: number) => {
       const { pos, n } = sim.system
       let r = 0
-      for (let i = 0; i < n; i++) r = Math.max(r, Math.hypot(pos[2 * i] - origin[0], pos[2 * i + 1] - origin[1]))
+      for (let i = 0; i < n; i++) r = Math.max(r, Math.hypot(pos[3 * i] - origin[0], pos[3 * i + 1] - origin[1]))
       camera.current = { cx: 0, cy: 0, scale: (0.45 * Math.min(w, h - TOP_INSET)) / (r || 1) }
     }
 
@@ -71,7 +71,8 @@ export function SimulationCanvas(props: ViewProps) {
 
       const { pos, radius, info, n } = sim.system
       const fi = followIndex(sim, p.follow)
-      const origin: [number, number] = fi >= 0 ? [pos[2 * fi], pos[2 * fi + 1]] : [0, 0]
+      // Top-down view of the reference plane: z (height above it) is not shown.
+      const origin: [number, number] = fi >= 0 ? [pos[3 * fi], pos[3 * fi + 1]] : [0, 0]
       if (needsFit.current && w > 0) {
         fit(sim, origin, w, h)
         needsFit.current = false
@@ -105,7 +106,7 @@ export function SimulationCanvas(props: ViewProps) {
 
       ctx.font = '12px system-ui, sans-serif'
       for (let i = 0; i < n; i++) {
-        const x = sx(pos[2 * i]), y = sy(pos[2 * i + 1])
+        const x = sx(pos[3 * i]), y = sy(pos[3 * i + 1])
         const r = displayRadius(radius[i], scale)
         if (x < -50 - r || y < -50 - r || x > w + 50 + r || y > h + 50 + r) continue
         if (info[i].kind === 'star') {

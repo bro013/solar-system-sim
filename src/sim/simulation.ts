@@ -11,8 +11,8 @@ const TRAIL_ORBITS = 1.5
 const TRAIL_DRAW_POINTS = 600
 /** When following a body, other trails cover at most this many times that body's trail length. */
 const RELATIVE_TRAIL_FACTOR = 8
-/** Total trail samples kept across all bodies (16 bytes each), so ~32 MB at most. */
-const TRAIL_BUDGET = 2_000_000
+/** Total trail samples kept across all bodies (24 bytes each), so ~36 MB at most. */
+const TRAIL_BUDGET = 1_500_000
 
 export interface Stats {
   time: number
@@ -37,7 +37,7 @@ export class Simulation {
 
   /**
    * Trail samples for every body, all taken at the same ticks: a ring buffer laid out as
-   * [slot][body id][x, y]. Sharing ticks lets trails be drawn relative to a followed body.
+   * [slot][body id][x, y, z]. Sharing ticks lets trails be drawn relative to a followed body.
    */
   private trail: Float64Array
   private trailCapacity: number
@@ -62,7 +62,7 @@ export class Simulation {
     this.trailCapacity = Math.max(2, Math.min(Math.max(...wanted), Math.floor(TRAIL_BUDGET / this.bodyCount)))
     this.trailLength = wanted.map((w) => Math.min(w, this.trailCapacity))
     this.trailStride = this.trailLength.map((len) => Math.max(1, Math.ceil(len / TRAIL_DRAW_POINTS)))
-    this.trail = new Float64Array(this.trailCapacity * this.bodyCount * 2)
+    this.trail = new Float64Array(this.trailCapacity * this.bodyCount * 3)
     this.recordTrails()
   }
 
@@ -86,12 +86,8 @@ export class Simulation {
 
   private recordTrails() {
     const { pos, info, n } = this.system
-    const base = (this.ticks % this.trailCapacity) * this.bodyCount * 2
-    for (let i = 0; i < n; i++) {
-      const id = info[i].id
-      this.trail[base + 2 * id] = pos[2 * i]
-      this.trail[base + 2 * id + 1] = pos[2 * i + 1]
-    }
+    const base = (this.ticks % this.trailCapacity) * this.bodyCount * 3
+    for (let i = 0; i < n; i++) this.trail.set(pos.subarray(3 * i, 3 * i + 3), base + 3 * info[i].id)
     this.ticks++
     this.trailCount = Math.min(this.trailCount + 1, this.trailCapacity)
   }
@@ -100,7 +96,7 @@ export class Simulation {
    * Calls `point` for each drawn trail point of body `id`, oldest first. With `refId`, positions are
    * relative to that body at the same moment. Points are thinned on fixed ticks so they don't shimmer.
    */
-  forEachTrailPoint(id: number, refId: number | null, point: (x: number, y: number) => void) {
+  forEachTrailPoint(id: number, refId: number | null, point: (x: number, y: number, z: number) => void) {
     let len = Math.min(this.trailCount, this.trailLength[id])
     let stride = this.trailStride[id]
     if (refId !== null && refId !== id) {
@@ -112,13 +108,14 @@ export class Simulation {
     if (len < 2) return
     const newest = this.ticks - 1
     const visit = (t: number) => {
-      const base = (t % this.trailCapacity) * this.bodyCount * 2
-      let x = this.trail[base + 2 * id], y = this.trail[base + 2 * id + 1]
-      if (refId !== null) {
-        x -= this.trail[base + 2 * refId]
-        y -= this.trail[base + 2 * refId + 1]
+      const base = (t % this.trailCapacity) * this.bodyCount * 3
+      const b = base + 3 * id
+      if (refId === null) {
+        point(this.trail[b], this.trail[b + 1], this.trail[b + 2])
+      } else {
+        const r = base + 3 * refId
+        point(this.trail[b] - this.trail[r], this.trail[b + 1] - this.trail[r + 1], this.trail[b + 2] - this.trail[r + 2])
       }
-      point(x, y)
     }
     const oldest = this.ticks - len
     for (let t = Math.ceil(oldest / stride) * stride; t < newest; t += stride) visit(t)

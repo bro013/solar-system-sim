@@ -13,8 +13,12 @@ export interface StarConfig {
    * Each star is put on a circular orbit around the stars before it (a hierarchical system).
    */
   distance: number
-  /** Degrees; direction of the star from that barycentre. */
+  /** Degrees; direction of the star from that barycentre (longitude, measured in the reference plane). */
   angle: number
+  /** Degrees; tilt of the orbit from the reference plane (0 = flat, 90 = polar, > 90 = retrograde). */
+  inclination: number
+  /** Degrees; longitude of the ascending node, where the orbit rises through the reference plane. */
+  node: number
 }
 
 /** `host` is a star index, or 'all' for a circumbinary planet orbiting every star's barycentre. */
@@ -32,8 +36,12 @@ export interface PlanetConfig {
   distance: number
   /** 0 ≤ e < 1. The planet starts at periapsis. */
   eccentricity: number
-  /** Degrees; starting direction from the host. */
+  /** Degrees; longitude of periapsis, where the planet starts (measured from the x axis, as for a flat orbit). */
   angle: number
+  /** Degrees; tilt of the orbit from the reference plane (0 = flat, 90 = polar, > 90 = retrograde). */
+  inclination: number
+  /** Degrees; longitude of the ascending node, where the orbit rises through the reference plane. */
+  node: number
 }
 
 export interface SystemConfig {
@@ -56,41 +64,54 @@ interface Group {
   mass: number
   x: number
   y: number
+  z: number
   vx: number
   vy: number
+  vz: number
 }
 
 function barycentre(bodies: BodyInit[]): Group {
-  const g = { mass: 0, x: 0, y: 0, vx: 0, vy: 0 }
+  const g = { mass: 0, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 }
   for (const b of bodies) {
     g.mass += b.mass
-    g.x += b.mass * b.x
-    g.y += b.mass * b.y
-    g.vx += b.mass * b.vx
-    g.vy += b.mass * b.vy
+    for (const k of ['x', 'y', 'z', 'vx', 'vy', 'vz'] as const) g[k] += b.mass * b[k]
   }
-  g.x /= g.mass
-  g.y /= g.mass
-  g.vx /= g.mass
-  g.vy /= g.mass
+  for (const k of ['x', 'y', 'z', 'vx', 'vy', 'vz'] as const) g[k] /= g.mass
   return g
 }
 
+interface Orbit {
+  /** AU, semi-major axis */
+  a: number
+  e: number
+  /** Degrees: longitude of periapsis, inclination, longitude of ascending node. */
+  angle: number
+  inclination: number
+  node: number
+}
+
+const rad = (deg: number) => (deg * Math.PI) / 180
+
 /**
- * Places a body of mass m at periapsis of a Keplerian orbit (semi-major axis a, eccentricity e)
- * around `host`, counter-clockwise, in direction `angleDeg`.
+ * Places a body of mass m at periapsis of a Keplerian orbit around `host`, moving prograde (counter-clockwise
+ * seen from +z when the inclination is below 90°). The orbit plane is rotated by the classical sequence
+ * Rz(node) · Rx(inclination) · Rz(argument of periapsis), where argument of periapsis = angle − node.
  */
-function orbitAround(host: Group, m: number, a: number, e: number, angleDeg: number) {
-  const th = (angleDeg * Math.PI) / 180
-  const r = a * (1 - e)
+function orbitAround(host: Group, m: number, orbit: Orbit) {
+  const r = orbit.a * (1 - orbit.e)
   // Vis-viva at periapsis for the two-body problem.
-  const v = Math.sqrt((G * (host.mass + m) * (1 + e)) / r)
-  return {
-    x: host.x + r * Math.cos(th),
-    y: host.y + r * Math.sin(th),
-    vx: host.vx - v * Math.sin(th),
-    vy: host.vy + v * Math.cos(th),
+  const v = Math.sqrt((G * (host.mass + m) * (1 + orbit.e)) / r)
+  const node = rad(orbit.node), inc = rad(orbit.inclination), w = rad(orbit.angle - orbit.node)
+
+  /** Rotates the in-plane vector (px, py) into the reference frame. */
+  const rotate = (px: number, py: number) => {
+    const u = px * Math.cos(w) - py * Math.sin(w)
+    const t = px * Math.sin(w) + py * Math.cos(w)
+    return [u * Math.cos(node) - t * Math.cos(inc) * Math.sin(node), u * Math.sin(node) + t * Math.cos(inc) * Math.cos(node), t * Math.sin(inc)]
   }
+  const [x, y, z] = rotate(r, 0)
+  const [vx, vy, vz] = rotate(0, v)
+  return { x: host.x + x, y: host.y + y, z: host.z + z, vx: host.vx + vx, vy: host.vy + vy, vz: host.vz + vz }
 }
 
 export function validate(config: SystemConfig): string[] {
@@ -100,12 +121,14 @@ export function validate(config: SystemConfig): string[] {
     if (!(s.mass > 0)) errors.push(`${s.name}: mass must be positive.`)
     if (!(s.radius > 0)) errors.push(`${s.name}: radius must be positive.`)
     if (i > 0 && !(s.distance > 0)) errors.push(`${s.name}: distance must be positive.`)
+    if (i > 0 && !(s.inclination >= 0 && s.inclination <= 180)) errors.push(`${s.name}: inclination must be in [0°, 180°].`)
   })
   config.planets.forEach((p) => {
     if (!(p.mass > 0)) errors.push(`${p.name}: mass must be positive.`)
     if (!(p.radius > 0)) errors.push(`${p.name}: radius must be positive.`)
     if (!(p.distance > 0)) errors.push(`${p.name}: distance must be positive.`)
     if (!(p.eccentricity >= 0 && p.eccentricity < 1)) errors.push(`${p.name}: eccentricity must be in [0, 1).`)
+    if (!(p.inclination >= 0 && p.inclination <= 180)) errors.push(`${p.name}: inclination must be in [0°, 180°].`)
     if (p.host !== 'all' && (p.host < 0 || p.host >= config.stars.length)) errors.push(`${p.name}: host star does not exist.`)
   })
   return errors
@@ -117,9 +140,10 @@ export function buildBodies(config: SystemConfig): BodyInit[] {
   for (const [i, s] of config.stars.entries()) {
     const base = { name: s.name, kind: 'star' as const, color: starColor(s.mass), mass: s.mass, radius: solarRadii(s.radius) }
     if (i === 0) {
-      stars.push({ ...base, x: 0, y: 0, vx: 0, vy: 0 })
+      stars.push({ ...base, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 })
     } else {
-      stars.push({ ...base, ...orbitAround(barycentre(stars), s.mass, s.distance, 0, s.angle) })
+      const orbit = { a: s.distance, e: 0, angle: s.angle, inclination: s.inclination, node: s.node }
+      stars.push({ ...base, ...orbitAround(barycentre(stars), s.mass, orbit) })
     }
   }
 
@@ -133,13 +157,13 @@ export function buildBodies(config: SystemConfig): BodyInit[] {
       color: PLANET_COLORS[i % PLANET_COLORS.length],
       mass: m,
       radius: earthRadii(p.radius),
-      ...orbitAround(host, m, p.distance, p.eccentricity, p.angle),
+      ...orbitAround(host, m, { a: p.distance, e: p.eccentricity, angle: p.angle, inclination: p.inclination, node: p.node }),
     }
   })
 
   const bodies = [...stars, ...planets]
   const cm = barycentre(bodies)
-  return bodies.map((b) => ({ ...b, x: b.x - cm.x, y: b.y - cm.y, vx: b.vx - cm.vx, vy: b.vy - cm.vy }))
+  return bodies.map((b) => ({ ...b, x: b.x - cm.x, y: b.y - cm.y, z: b.z - cm.z, vx: b.vx - cm.vx, vy: b.vy - cm.vy, vz: b.vz - cm.vz }))
 }
 
 /** Orbital period (years) of each configured orbit; the shortest one sets the time step. */

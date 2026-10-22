@@ -16,9 +16,11 @@ export interface BodyInit extends Omit<BodyInfo, 'id'> {
   radius: number
   x: number
   y: number
+  z: number
   /** AU / yr */
   vx: number
   vy: number
+  vz: number
 }
 
 export interface Merger {
@@ -27,9 +29,12 @@ export interface Merger {
   time: number
 }
 
+export type Vec3 = [number, number, number]
+
 /**
- * 2D Newtonian N-body system integrated with leapfrog (kick-drift-kick).
- * State lives in flat Float64Arrays: body i is at pos[2i], pos[2i+1].
+ * 3D Newtonian N-body system integrated with leapfrog (kick-drift-kick).
+ * State lives in flat Float64Arrays: body i is at pos[3i], pos[3i+1], pos[3i+2].
+ * The xy plane is the reference plane; z is height above it.
  * Bodies that touch (distance < sum of radii) merge, conserving mass and momentum.
  */
 export class NBody {
@@ -47,18 +52,16 @@ export class NBody {
   constructor(bodies: BodyInit[], softening = 1e-6) {
     const n = bodies.length
     this.n = n
-    this.pos = new Float64Array(2 * n)
-    this.vel = new Float64Array(2 * n)
-    this.acc = new Float64Array(2 * n)
+    this.pos = new Float64Array(3 * n)
+    this.vel = new Float64Array(3 * n)
+    this.acc = new Float64Array(3 * n)
     this.mass = new Float64Array(n)
     this.radius = new Float64Array(n)
     this.info = []
     this.softening = softening
     bodies.forEach((b, i) => {
-      this.pos[2 * i] = b.x
-      this.pos[2 * i + 1] = b.y
-      this.vel[2 * i] = b.vx
-      this.vel[2 * i + 1] = b.vy
+      this.pos.set([b.x, b.y, b.z], 3 * i)
+      this.vel.set([b.vx, b.vy, b.vz], 3 * i)
       this.mass[i] = b.mass
       this.radius[i] = b.radius
       this.info.push({ id: i, name: b.name, kind: b.kind, color: b.color })
@@ -71,15 +74,18 @@ export class NBody {
     const eps2 = this.softening ** 2
     acc.fill(0)
     for (let i = 0; i < n; i++) {
-      const xi = pos[2 * i], yi = pos[2 * i + 1]
+      const xi = pos[3 * i], yi = pos[3 * i + 1], zi = pos[3 * i + 2]
       for (let j = i + 1; j < n; j++) {
-        const dx = pos[2 * j] - xi, dy = pos[2 * j + 1] - yi
-        const r2 = dx * dx + dy * dy + eps2
+        const dx = pos[3 * j] - xi, dy = pos[3 * j + 1] - yi, dz = pos[3 * j + 2] - zi
+        const r2 = dx * dx + dy * dy + dz * dz + eps2
         const inv = G / (r2 * Math.sqrt(r2))
-        acc[2 * i] += dx * inv * mass[j]
-        acc[2 * i + 1] += dy * inv * mass[j]
-        acc[2 * j] -= dx * inv * mass[i]
-        acc[2 * j + 1] -= dy * inv * mass[i]
+        const mi = mass[i] * inv, mj = mass[j] * inv
+        acc[3 * i] += dx * mj
+        acc[3 * i + 1] += dy * mj
+        acc[3 * i + 2] += dz * mj
+        acc[3 * j] -= dx * mi
+        acc[3 * j + 1] -= dy * mi
+        acc[3 * j + 2] -= dz * mi
       }
     }
   }
@@ -87,7 +93,7 @@ export class NBody {
   /** Advances one leapfrog step of dt years. Returns any mergers that happened. */
   step(dt: number): Merger[] {
     const { pos, vel, acc } = this
-    const len = 2 * this.n
+    const len = 3 * this.n
     for (let k = 0; k < len; k++) {
       vel[k] += 0.5 * dt * acc[k]
       pos[k] += dt * vel[k]
@@ -98,14 +104,19 @@ export class NBody {
     return this.resolveCollisions()
   }
 
+  private distance2(i: number, j: number) {
+    const dx = this.pos[3 * j] - this.pos[3 * i]
+    const dy = this.pos[3 * j + 1] - this.pos[3 * i + 1]
+    const dz = this.pos[3 * j + 2] - this.pos[3 * i + 2]
+    return dx * dx + dy * dy + dz * dz
+  }
+
   private resolveCollisions(): Merger[] {
     const mergers: Merger[] = []
     for (let i = 0; i < this.n; i++) {
       for (let j = i + 1; j < this.n; j++) {
-        const dx = this.pos[2 * j] - this.pos[2 * i]
-        const dy = this.pos[2 * j + 1] - this.pos[2 * i + 1]
         const rsum = this.radius[i] + this.radius[j]
-        if (dx * dx + dy * dy < rsum * rsum) {
+        if (this.distance2(i, j) < rsum * rsum) {
           const [keep, drop] = this.mass[i] >= this.mass[j] ? [i, j] : [j, i]
           mergers.push({ survivor: this.info[keep], absorbed: this.info[drop], time: this.time })
           this.merge(keep, drop)
@@ -121,9 +132,9 @@ export class NBody {
   private merge(keep: number, drop: number) {
     const { pos, vel, mass, radius } = this
     const m1 = mass[keep], m2 = mass[drop], m = m1 + m2
-    for (const k of [0, 1]) {
-      pos[2 * keep + k] = (m1 * pos[2 * keep + k] + m2 * pos[2 * drop + k]) / m
-      vel[2 * keep + k] = (m1 * vel[2 * keep + k] + m2 * vel[2 * drop + k]) / m
+    for (const k of [0, 1, 2]) {
+      pos[3 * keep + k] = (m1 * pos[3 * keep + k] + m2 * pos[3 * drop + k]) / m
+      vel[3 * keep + k] = (m1 * vel[3 * keep + k] + m2 * vel[3 * drop + k]) / m
     }
     mass[keep] = m
     radius[keep] = Math.cbrt(radius[keep] ** 3 + radius[drop] ** 3)
@@ -131,24 +142,19 @@ export class NBody {
   }
 
   private remove(idx: number) {
-    const last = this.n - 1
-    for (let i = idx; i < last; i++) {
-      this.pos[2 * i] = this.pos[2 * i + 2]
-      this.pos[2 * i + 1] = this.pos[2 * i + 3]
-      this.vel[2 * i] = this.vel[2 * i + 2]
-      this.vel[2 * i + 1] = this.vel[2 * i + 3]
-      this.mass[i] = this.mass[i + 1]
-      this.radius[i] = this.radius[i + 1]
-    }
+    this.pos.copyWithin(3 * idx, 3 * idx + 3, 3 * this.n)
+    this.vel.copyWithin(3 * idx, 3 * idx + 3, 3 * this.n)
+    this.mass.copyWithin(idx, idx + 1, this.n)
+    this.radius.copyWithin(idx, idx + 1, this.n)
     this.info.splice(idx, 1)
-    this.n = last
+    this.n--
   }
 
   kineticEnergy() {
     let e = 0
     for (let i = 0; i < this.n; i++) {
-      const vx = this.vel[2 * i], vy = this.vel[2 * i + 1]
-      e += 0.5 * this.mass[i] * (vx * vx + vy * vy)
+      const vx = this.vel[3 * i], vy = this.vel[3 * i + 1], vz = this.vel[3 * i + 2]
+      e += 0.5 * this.mass[i] * (vx * vx + vy * vy + vz * vz)
     }
     return e
   }
@@ -156,10 +162,7 @@ export class NBody {
   potentialEnergy() {
     let e = 0
     for (let i = 0; i < this.n; i++) {
-      for (let j = i + 1; j < this.n; j++) {
-        const dx = this.pos[2 * j] - this.pos[2 * i], dy = this.pos[2 * j + 1] - this.pos[2 * i + 1]
-        e -= (G * this.mass[i] * this.mass[j]) / Math.sqrt(dx * dx + dy * dy)
-      }
+      for (let j = i + 1; j < this.n; j++) e -= (G * this.mass[i] * this.mass[j]) / Math.sqrt(this.distance2(i, j))
     }
     return e
   }
@@ -168,21 +171,24 @@ export class NBody {
     return this.kineticEnergy() + this.potentialEnergy()
   }
 
-  /** z-component of total angular momentum about the origin. */
-  angularMomentum() {
-    let l = 0
+  /** Total angular momentum about the origin. */
+  angularMomentum(): Vec3 {
+    const l: Vec3 = [0, 0, 0]
+    const { pos: p, vel: v } = this
     for (let i = 0; i < this.n; i++) {
-      l += this.mass[i] * (this.pos[2 * i] * this.vel[2 * i + 1] - this.pos[2 * i + 1] * this.vel[2 * i])
+      const m = this.mass[i], k = 3 * i
+      l[0] += m * (p[k + 1] * v[k + 2] - p[k + 2] * v[k + 1])
+      l[1] += m * (p[k + 2] * v[k] - p[k] * v[k + 2])
+      l[2] += m * (p[k] * v[k + 1] - p[k + 1] * v[k])
     }
     return l
   }
 
-  momentum(): [number, number] {
-    let px = 0, py = 0
+  momentum(): Vec3 {
+    const p: Vec3 = [0, 0, 0]
     for (let i = 0; i < this.n; i++) {
-      px += this.mass[i] * this.vel[2 * i]
-      py += this.mass[i] * this.vel[2 * i + 1]
+      for (const k of [0, 1, 2]) p[k] += this.mass[i] * this.vel[3 * i + k]
     }
-    return [px, py]
+    return p
   }
 }

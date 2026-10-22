@@ -3,8 +3,8 @@ import { PRESETS } from '../physics/presets'
 import { Simulation } from './simulation'
 
 function trail(sim: Simulation, id: number, refId: number | null = null) {
-  const points: [number, number][] = []
-  sim.forEachTrailPoint(id, refId, (x, y) => points.push([x, y]))
+  const points: [number, number, number][] = []
+  sim.forEachTrailPoint(id, refId, (x, y, z) => points.push([x, y, z]))
   return points
 }
 
@@ -19,7 +19,8 @@ describe('trails', () => {
     // Samples are taken every few steps, so the newest one can lag slightly (Earth moves ~0.01 AU in 5 steps).
     const i = names.indexOf('Earth')
     const last = trail(sim, id('Earth')).at(-1)!
-    expect(Math.hypot(last[0] - sim.system.pos[2 * i], last[1] - sim.system.pos[2 * i + 1])).toBeLessThan(0.02)
+    const { pos } = sim.system
+    expect(Math.hypot(last[0] - pos[3 * i], last[1] - pos[3 * i + 1], last[2] - pos[3 * i + 2])).toBeLessThan(0.02)
   })
 
   it('covers a full orbit even for Neptune, with a bounded number of points', () => {
@@ -39,7 +40,7 @@ describe('trails', () => {
 
   it('is relative to the reference body when one is given', () => {
     const sun = trail(sim, id('Sun'), id('Sun'))
-    expect(sun.every(([x, y]) => x === 0 && y === 0)).toBe(true)
+    expect(sun.every(([x, y, z]) => x === 0 && y === 0 && z === 0)).toBe(true)
   })
 
   it('is smooth relative to a followed planet', () => {

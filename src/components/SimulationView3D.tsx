@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js'
+import type { Vec3 } from '../physics/nbody'
 import type { Simulation } from '../sim/simulation'
 import { displayRadius, formatAU, listenForZoomKeys, niceLength, STATS_INTERVAL_MS, TOP_INSET, ZOOM_STEP, type ViewProps } from './view'
 
@@ -20,11 +21,12 @@ interface BodyObject {
 }
 
 /**
- * The simulation plane is drawn as three.js's XZ plane with Y up: sim (x, y) → (x, 0, −y), so orbits
- * look counter-clockwise from above, as in the 2D view. Positions are taken relative to the followed
- * body in double precision before they reach the GPU, which keeps close-ups precise.
+ * The simulation's reference (xy) plane is drawn as three.js's XZ plane with Y up: sim (x, y, z) → (x, z, −y).
+ * This keeps the frame right-handed, so prograde orbits look counter-clockwise from above, as in the 2D view.
+ * Positions are taken relative to the followed body in double precision before they reach the GPU, which
+ * keeps close-ups precise.
  */
-const toScene = (v: THREE.Vector3, x: number, y: number) => v.set(x, 0, -y)
+const toScene = (v: THREE.Vector3, x: number, y: number, z: number) => v.set(x, z, -y)
 
 /** A soft white radial gradient, tinted per star by the sprite material. */
 function glowTexture() {
@@ -174,10 +176,12 @@ export default function SimulationView3D(props: ViewProps) {
     observer.observe(wrap)
     resize()
 
-    const fit = (sim: Simulation, origin: [number, number]) => {
+    const fit = (sim: Simulation, origin: Vec3) => {
       const { pos, n } = sim.system
       let r = 0
-      for (let i = 0; i < n; i++) r = Math.max(r, Math.hypot(pos[2 * i] - origin[0], pos[2 * i + 1] - origin[1]))
+      for (let i = 0; i < n; i++) {
+        r = Math.max(r, Math.hypot(pos[3 * i] - origin[0], pos[3 * i + 1] - origin[1], pos[3 * i + 2] - origin[2]))
+      }
       r ||= 1
       const dist = (1.15 * r) / Math.tan(THREE.MathUtils.degToRad(FOV / 2))
       const tilt = THREE.MathUtils.degToRad(FIT_TILT)
@@ -216,13 +220,13 @@ export default function SimulationView3D(props: ViewProps) {
 
       const { pos, radius, info, n } = sim.system
       const fi = p.follow === null ? -1 : info.findIndex((b) => b.id === p.follow)
-      const origin: [number, number] = fi >= 0 ? [pos[2 * fi], pos[2 * fi + 1]] : [0, 0]
+      const origin: Vec3 = fi >= 0 ? [pos[3 * fi], pos[3 * fi + 1], pos[3 * fi + 2]] : [0, 0, 0]
       if (needsFit.current) {
         fit(sim, origin)
         needsFit.current = false
       }
       controls.update()
-      if (grid) toScene(grid.position, -origin[0], -origin[1])
+      if (grid) toScene(grid.position, -origin[0], -origin[1], -origin[2])
 
       // Keep near/far proportional to the viewing distance so any zoom level renders with good depth precision.
       const dist = camera.position.distanceTo(controls.target)
@@ -238,7 +242,7 @@ export default function SimulationView3D(props: ViewProps) {
         const o = bodies.get(info[i].id)
         if (!o) continue
         alive.add(info[i].id)
-        toScene(o.mesh.position, pos[2 * i] - origin[0], pos[2 * i + 1] - origin[1])
+        toScene(o.mesh.position, pos[3 * i] - origin[0], pos[3 * i + 1] - origin[1], pos[3 * i + 2] - origin[2])
         // Same apparent size as in the 2D view: convert the on-screen radius back to scene units at this distance.
         const pxPerAU = pxPerUnitAtDistance / Math.max(o.mesh.position.distanceTo(camera.position), 1e-12)
         const r = displayRadius(radius[i], pxPerAU) / pxPerAU
@@ -262,7 +266,7 @@ export default function SimulationView3D(props: ViewProps) {
         o.trail.visible = p.showTrails
         if (!p.showTrails) continue
         let count = 0
-        sim.forEachTrailPoint(id, refId, (x, y) => {
+        sim.forEachTrailPoint(id, refId, (x, y, z) => {
           if (3 * (count + 1) > o.trailPositions.length) {
             const bigger = new Float32Array(o.trailPositions.length * 2)
             bigger.set(o.trailPositions)
@@ -270,7 +274,8 @@ export default function SimulationView3D(props: ViewProps) {
             o.trail.geometry.setAttribute('position', new THREE.BufferAttribute(bigger, 3))
           }
           // Relative trails are already centred on the followed body; absolute ones are shifted like the bodies.
-          toScene(v, refId === null ? x - origin[0] : x, refId === null ? y - origin[1] : y)
+          if (refId === null) toScene(v, x - origin[0], y - origin[1], z - origin[2])
+          else toScene(v, x, y, z)
           o.trailPositions[3 * count] = v.x
           o.trailPositions[3 * count + 1] = v.y
           o.trailPositions[3 * count + 2] = v.z

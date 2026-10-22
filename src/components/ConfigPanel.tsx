@@ -36,7 +36,8 @@ export function ConfigPanel({ config, onChange }: Props) {
 
   return (
     <div className="config">
-      <section>
+      {/* Pinned, so presets and counts stay reachable while the list of bodies scrolls. */}
+      <section className="config-top">
         <label className="field">
           <span className="field-label">Load preset</span>
           <select
@@ -59,6 +60,12 @@ export function ConfigPanel({ config, onChange }: Props) {
           <NumberField label="Planets" value={planets.length} min={0} max={MAX_PLANETS} step={1} onChange={setPlanetCount} />
         </div>
       </section>
+
+      <p className="hint">
+        <b>Angle</b>: direction of periapsis (where the body starts). <b>Inclination</b>: tilt from the reference plane;
+        above 90° the orbit is retrograde. <b>Node</b>: direction where the orbit rises through the plane. Tilts show in the
+        3D view; the 2D view looks straight down on the plane.
+      </p>
 
       <h2>Stars</h2>
       {stars.map((s, i) => (
@@ -83,6 +90,8 @@ export function ConfigPanel({ config, onChange }: Props) {
               <>
                 <NumberField label="Distance" unit="AU" value={s.distance} min={0} onChange={(distance) => setStar(i, { distance })} />
                 <NumberField label="Angle" unit="°" value={s.angle} onChange={(angle) => setStar(i, { angle })} />
+                <NumberField label="Inclination" unit="°" value={s.inclination} min={0} max={180} onChange={(inclination) => setStar(i, { inclination })} />
+                <NumberField label="Node" unit="°" value={s.node} onChange={(node) => setStar(i, { node })} />
               </>
             )}
           </div>
@@ -117,6 +126,8 @@ export function ConfigPanel({ config, onChange }: Props) {
             <NumberField label="Distance" unit="AU" value={p.distance} min={0} onChange={(distance) => setPlanet(i, { distance })} />
             <NumberField label="Eccentricity" value={p.eccentricity} min={0} max={0.99} step={0.01} onChange={(eccentricity) => setPlanet(i, { eccentricity })} />
             <NumberField label="Angle" unit="°" value={p.angle} onChange={(angle) => setPlanet(i, { angle })} />
+            <NumberField label="Inclination" unit="°" value={p.inclination} min={0} max={180} onChange={(inclination) => setPlanet(i, { inclination })} />
+            <NumberField label="Node" unit="°" value={p.node} onChange={(node) => setPlanet(i, { node })} />
           </div>
         </fieldset>
       ))}

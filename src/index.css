@@ -61,6 +61,17 @@ h2 {
   padding: 0 16px 16px;
 }
 
+.config-top {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--panel);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 8px 10px -8px rgba(0, 0, 0, 0.7);
+  margin-bottom: 8px;
+}
+
 .hint {
   color: var(--muted);
   font-size: 0.85rem;
