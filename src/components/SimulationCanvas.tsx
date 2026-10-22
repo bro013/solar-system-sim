@@ -1,17 +1,6 @@
 import { useEffect, useRef } from 'react'
-import type { Simulation, Stats } from '../sim/simulation'
-import { EARTH_RADIUS } from '../physics/units'
-
-interface Props {
-  sim: Simulation | null
-  running: boolean
-  yearsPerSecond: number
-  showTrails: boolean
-  showLabels: boolean
-  /** Body id to keep centred, or null for the system barycentre. */
-  follow: number | null
-  onStats: (stats: Stats) => void
-}
+import type { Simulation } from '../sim/simulation'
+import { displayRadius, formatAU, listenForZoomKeys, niceLength, STATS_INTERVAL_MS, TOP_INSET, ZOOM_STEP, type ViewProps } from './view'
 
 interface Camera {
   /** View centre in AU, relative to the followed body (or the origin). */
@@ -21,35 +10,11 @@ interface Camera {
   scale: number
 }
 
-const STATS_INTERVAL_MS = 250
-/** Height reserved for the toolbar overlay; the view is centred in the space below it. */
-const TOP_INSET = 70
-/** Zoom factor per button press, key press or double-click. */
-const ZOOM_STEP = 1.5
 /** Zoom limits in px per AU: ~100 000 AU across the screen to a planet filling it. */
 const MIN_SCALE = 1e-2
 const MAX_SCALE = 1e8
 
-/**
- * Bodies are far too small to see at true scale (Earth is ~1/23 000 AU), so they are drawn
- * at a logarithmically exaggerated size, or at true size once zoomed in far enough.
- */
-function displayRadius(radiusAU: number, scale: number) {
-  return Math.max(radiusAU * scale, 2 + 3 * Math.log10(1 + radiusAU / EARTH_RADIUS))
-}
-
-/** A "nice" length (1, 2 or 5 × 10^k AU) for the scale bar. */
-function niceLength(maxAU: number) {
-  const p = 10 ** Math.floor(Math.log10(maxAU))
-  for (const m of [5, 2, 1]) if (m * p <= maxAU) return m * p
-  return p
-}
-
-function formatAU(au: number) {
-  return au >= 1 ? `${au} AU` : `${+au.toPrecision(2)} AU`
-}
-
-export function SimulationCanvas(props: Props) {
+export function SimulationCanvas(props: ViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const propsRef = useRef(props)
   const camera = useRef<Camera>({ cx: 0, cy: 0, scale: 100 })
@@ -241,23 +206,13 @@ export function SimulationCanvas(props: Props) {
     const onDoubleClick = (e: MouseEvent) => {
       zoomAt(...fromCentre(e.clientX, e.clientY), e.shiftKey ? 1 / ZOOM_STEP : ZOOM_STEP)
     }
-    const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement
-      if (e.ctrlKey || e.metaKey || e.altKey || target.matches('input, select, textarea')) return
-      if (e.key === '+' || e.key === '=') zoomAt(0, 0, ZOOM_STEP)
-      else if (e.key === '-') zoomAt(0, 0, 1 / ZOOM_STEP)
-      else if (e.key === '0') needsFit.current = true
-      else return
-      e.preventDefault()
-    }
-
     canvas.addEventListener('pointerdown', onDown)
     canvas.addEventListener('pointermove', onMove)
     canvas.addEventListener('pointerup', onUp)
     canvas.addEventListener('pointercancel', onUp)
     canvas.addEventListener('wheel', onWheel, { passive: false })
     canvas.addEventListener('dblclick', onDoubleClick)
-    window.addEventListener('keydown', onKey)
+    const stopKeys = listenForZoomKeys((f) => zoomAt(0, 0, f), () => (needsFit.current = true))
     return () => {
       canvas.removeEventListener('pointerdown', onDown)
       canvas.removeEventListener('pointermove', onMove)
@@ -265,7 +220,7 @@ export function SimulationCanvas(props: Props) {
       canvas.removeEventListener('pointercancel', onUp)
       canvas.removeEventListener('wheel', onWheel)
       canvas.removeEventListener('dblclick', onDoubleClick)
-      window.removeEventListener('keydown', onKey)
+      stopKeys()
     }
   }, [])
 
