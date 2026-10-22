@@ -24,7 +24,6 @@ export default function App() {
   const [showTrails, setShowTrails] = useState(true)
   const [showLabels, setShowLabels] = useState(true)
   const [follow, setFollow] = useState<number | null>(null)
-  const [fitKey, setFitKey] = useState(0)
   const [stats, setStats] = useState<Stats | null>(null)
 
   const errors = useMemo(() => validate(config), [config])
@@ -69,7 +68,6 @@ export default function App() {
           showTrails={showTrails}
           showLabels={showLabels}
           follow={follow}
-          fitKey={fitKey}
           onStats={setStats}
         />
 
@@ -106,9 +104,6 @@ export default function App() {
               ))}
             </select>
           </label>
-          <button type="button" onClick={() => setFitKey(fitKey + 1)}>
-            Fit view
-          </button>
           <button type="button" onClick={() => sim.clearTrails()}>
             Clear trails
           </button>

@@ -10,8 +10,6 @@ interface Props {
   showLabels: boolean
   /** Body id to keep centred, or null for the system barycentre. */
   follow: number | null
-  /** Change to re-fit the view to the whole system. */
-  fitKey: number
   onStats: (stats: Stats) => void
 }
 
@@ -26,6 +24,11 @@ interface Camera {
 const STATS_INTERVAL_MS = 250
 /** Height reserved for the toolbar overlay; the view is centred in the space below it. */
 const TOP_INSET = 70
+/** Zoom factor per button press, key press or double-click. */
+const ZOOM_STEP = 1.5
+/** Zoom limits in px per AU: ~100 000 AU across the screen to a planet filling it. */
+const MIN_SCALE = 1e-2
+const MAX_SCALE = 1e8
 
 /**
  * Bodies are far too small to see at true scale (Earth is ~1/23 000 AU), so they are drawn
@@ -58,7 +61,7 @@ export function SimulationCanvas(props: Props) {
 
   useEffect(() => {
     needsFit.current = true
-  }, [props.sim, props.fitKey, props.follow])
+  }, [props.sim, props.follow])
 
   useEffect(() => {
     const canvas = canvasRef.current!
@@ -182,35 +185,70 @@ export function SimulationCanvas(props: Props) {
     }
   }, [])
 
+  /** Zooms by `factor`, keeping the point (mx, my) px from the view centre fixed on screen. */
+  const zoomAt = (mx: number, my: number, factor: number) => {
+    const cam = camera.current
+    const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, cam.scale * factor))
+    cam.cx += mx / cam.scale - mx / scale
+    cam.cy -= my / cam.scale - my / scale
+    cam.scale = scale
+  }
+
   useEffect(() => {
     const canvas = canvasRef.current!
-    let drag: { x: number; y: number } | null = null
+    /** Active pointers (mouse or fingers) by pointer id, in client coordinates. */
+    const pointers = new Map<number, { x: number; y: number }>()
+    let pinchDistance = 0
+
+    /** Client coordinates → offset from the view centre in px. */
+    const fromCentre = (x: number, y: number): [number, number] => {
+      const rect = canvas.getBoundingClientRect()
+      return [x - rect.left - rect.width / 2, y - rect.top - (rect.height + TOP_INSET) / 2]
+    }
+    const pinch = () => {
+      const [a, b] = [...pointers.values()]
+      return { d: Math.hypot(a.x - b.x, a.y - b.y), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+    }
 
     const onDown = (e: PointerEvent) => {
-      drag = { x: e.clientX, y: e.clientY }
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
       canvas.setPointerCapture(e.pointerId)
+      if (pointers.size === 2) pinchDistance = pinch().d
     }
     const onMove = (e: PointerEvent) => {
-      if (!drag) return
-      const cam = camera.current
-      cam.cx -= (e.clientX - drag.x) / cam.scale
-      cam.cy += (e.clientY - drag.y) / cam.scale
-      drag = { x: e.clientX, y: e.clientY }
+      const prev = pointers.get(e.pointerId)
+      if (!prev) return
+      if (pointers.size === 1) {
+        const cam = camera.current
+        cam.cx -= (e.clientX - prev.x) / cam.scale
+        cam.cy += (e.clientY - prev.y) / cam.scale
+      }
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      if (pointers.size === 2) {
+        const p = pinch()
+        if (pinchDistance > 0) zoomAt(...fromCentre(p.x, p.y), p.d / pinchDistance)
+        pinchDistance = p.d
+      }
     }
-    const onUp = () => {
-      drag = null
+    const onUp = (e: PointerEvent) => {
+      pointers.delete(e.pointerId)
+      pinchDistance = 0
     }
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
-      const cam = camera.current
-      const rect = canvas.getBoundingClientRect()
-      // Keep the point under the cursor fixed while zooming.
-      const mx = e.clientX - rect.left - rect.width / 2
-      const my = e.clientY - rect.top - (rect.height + TOP_INSET) / 2
-      const factor = Math.exp(-e.deltaY * 0.0015)
-      cam.cx += mx / cam.scale - mx / (cam.scale * factor)
-      cam.cy -= my / cam.scale - my / (cam.scale * factor)
-      cam.scale *= factor
+      zoomAt(...fromCentre(e.clientX, e.clientY), Math.exp(-e.deltaY * 0.0015))
+    }
+    const onDoubleClick = (e: MouseEvent) => {
+      zoomAt(...fromCentre(e.clientX, e.clientY), e.shiftKey ? 1 / ZOOM_STEP : ZOOM_STEP)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      if (e.ctrlKey || e.metaKey || e.altKey || target.matches('input, select, textarea')) return
+      if (e.key === '+' || e.key === '=') zoomAt(0, 0, ZOOM_STEP)
+      else if (e.key === '-') zoomAt(0, 0, 1 / ZOOM_STEP)
+      else if (e.key === '0') needsFit.current = true
+      else return
+      e.preventDefault()
     }
 
     canvas.addEventListener('pointerdown', onDown)
@@ -218,14 +256,33 @@ export function SimulationCanvas(props: Props) {
     canvas.addEventListener('pointerup', onUp)
     canvas.addEventListener('pointercancel', onUp)
     canvas.addEventListener('wheel', onWheel, { passive: false })
+    canvas.addEventListener('dblclick', onDoubleClick)
+    window.addEventListener('keydown', onKey)
     return () => {
       canvas.removeEventListener('pointerdown', onDown)
       canvas.removeEventListener('pointermove', onMove)
       canvas.removeEventListener('pointerup', onUp)
       canvas.removeEventListener('pointercancel', onUp)
       canvas.removeEventListener('wheel', onWheel)
+      canvas.removeEventListener('dblclick', onDoubleClick)
+      window.removeEventListener('keydown', onKey)
     }
   }, [])
 
-  return <canvas ref={canvasRef} className="sim-canvas" />
+  return (
+    <>
+      <canvas ref={canvasRef} className="sim-canvas" />
+      <div className="zoom-controls">
+        <button type="button" title="Zoom in (+)" aria-label="Zoom in" onClick={() => zoomAt(0, 0, ZOOM_STEP)}>
+          +
+        </button>
+        <button type="button" title="Zoom out (−)" aria-label="Zoom out" onClick={() => zoomAt(0, 0, 1 / ZOOM_STEP)}>
+          −
+        </button>
+        <button type="button" title="Fit whole system (0)" aria-label="Fit view" onClick={() => (needsFit.current = true)}>
+          ⤢
+        </button>
+      </div>
+    </>
+  )
 }
