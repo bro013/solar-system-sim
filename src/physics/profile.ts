@@ -13,9 +13,13 @@ const UNITS = {
   host: "index into stars, or 'all' for the barycentre of all stars",
 }
 
+/** The profile as a plain object, ready for JSON. */
+export function toProfileData(config: SystemConfig) {
+  return { format: PROFILE_FORMAT, version: PROFILE_VERSION, units: UNITS, stars: config.stars, planets: config.planets }
+}
+
 export function serializeProfile(config: SystemConfig): string {
-  const profile = { format: PROFILE_FORMAT, version: PROFILE_VERSION, units: UNITS, stars: config.stars, planets: config.planets }
-  return JSON.stringify(profile, null, 2) + '\n'
+  return JSON.stringify(toProfileData(config), null, 2) + '\n'
 }
 
 /** A file name for the profile, based on the first star's name. */
@@ -53,11 +57,7 @@ function host(obj: Json, where: string): PlanetHost {
   throw new ProfileError(`${where}: "host" must be a star index (0, 1, …) or "all".`)
 }
 
-/**
- * Parses a profile, checking its structure and filling in optional fields (eccentricity, angle, inclination
- * and node default to 0). Physical limits such as positive masses are left to `validate`, so an imported
- * file with a bad value still loads into the form, where the problem is shown next to the Apply button.
- */
+/** Parses a profile from JSON text; see `profileFromData`. */
 export function parseProfile(text: string): SystemConfig {
   let data: unknown
   try {
@@ -65,6 +65,15 @@ export function parseProfile(text: string): SystemConfig {
   } catch (e) {
     throw new ProfileError(`Not valid JSON: ${(e as Error).message}`)
   }
+  return profileFromData(data)
+}
+
+/**
+ * Reads a profile from already-parsed JSON, checking its structure and filling in optional fields
+ * (eccentricity, angle, inclination and node default to 0). Physical limits such as positive masses are left to `validate`, so an imported
+ * file with a bad value still loads into the form, where the problem is shown next to the Apply button.
+ */
+export function profileFromData(data: unknown): SystemConfig {
   if (!isObject(data)) throw new ProfileError('Expected a JSON object with "stars" and "planets".')
   if (data.format !== undefined && data.format !== PROFILE_FORMAT) {
     throw new ProfileError(`Unknown format "${String(data.format)}"; expected "${PROFILE_FORMAT}".`)
