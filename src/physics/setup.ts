@@ -44,6 +44,9 @@ export interface PlanetConfig {
   node: number
 }
 
+export const MAX_STARS = 5
+export const MAX_PLANETS = 20
+
 export interface SystemConfig {
   stars: StarConfig[]
   planets: PlanetConfig[]
@@ -117,6 +120,8 @@ function orbitAround(host: Group, m: number, orbit: Orbit) {
 export function validate(config: SystemConfig): string[] {
   const errors: string[] = []
   if (config.stars.length === 0) errors.push('Add at least one star.')
+  if (config.stars.length > MAX_STARS) errors.push(`At most ${MAX_STARS} stars are supported.`)
+  if (config.planets.length > MAX_PLANETS) errors.push(`At most ${MAX_PLANETS} planets are supported.`)
   config.stars.forEach((s, i) => {
     if (!(s.mass > 0)) errors.push(`${s.name}: mass must be positive.`)
     if (!(s.radius > 0)) errors.push(`${s.name}: radius must be positive.`)

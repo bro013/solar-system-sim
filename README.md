@@ -22,6 +22,21 @@ npm run build    # type-check + production build into dist/
 npm run lint
 ```
 
+## Saving and loading systems
+
+**Export JSON** saves the system in the form to a file, and **Import JSON…** loads one back into the form; press Apply to run it. Values use the same units as the form. Optional fields (`eccentricity`, `angle`, `inclination`, `node`, and `distance` for the first star) default to 0. A planet's `host` is a star index (0 = first star) or `"all"` for a circumbinary orbit.
+
+```json
+{
+  "format": "solar-system-sim",
+  "version": 1,
+  "stars": [{ "name": "Sun", "mass": 1, "radius": 1 }],
+  "planets": [{ "name": "Earth", "mass": 1, "radius": 1, "host": 0, "distance": 1, "eccentricity": 0.017 }]
+}
+```
+
+The parser is in `src/physics/profile.ts`.
+
 ## How it works
 
 - **Units:** internally everything is in AU, solar masses and years, so G = 4π². Input is converted in `src/physics/units.ts` and `setup.ts`.

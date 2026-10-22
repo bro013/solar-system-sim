@@ -1,5 +1,7 @@
+import { useRef, useState } from 'react'
 import { defaultPlanet, defaultStar, PRESETS } from '../physics/presets'
-import type { PlanetConfig, PlanetHost, StarConfig, SystemConfig } from '../physics/setup'
+import { parseProfile, profileFileName, ProfileError, serializeProfile } from '../physics/profile'
+import { MAX_PLANETS, MAX_STARS, type PlanetConfig, type PlanetHost, type StarConfig, type SystemConfig } from '../physics/setup'
 import { mainSequenceRadius } from '../physics/units'
 import { NumberField } from './NumberField'
 
@@ -8,17 +10,34 @@ interface Props {
   onChange: (config: SystemConfig) => void
 }
 
-const MAX_STARS = 5
-const MAX_PLANETS = 20
-
 function resize<T>(list: T[], count: number, make: (i: number, prev?: T) => T): T[] {
   const next = list.slice(0, count)
   while (next.length < count) next.push(make(next.length, next[next.length - 1]))
   return next
 }
 
+function download(fileName: string, text: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fileName
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export function ConfigPanel({ config, onChange }: Props) {
   const { stars, planets } = config
+  const fileInput = useRef<HTMLInputElement>(null)
+  const [message, setMessage] = useState<{ error: boolean; text: string } | null>(null)
+
+  const importFile = async (file: File) => {
+    try {
+      onChange(parseProfile(await file.text()))
+      setMessage({ error: false, text: `Loaded ${file.name}. Press Apply to run it.` })
+    } catch (e) {
+      setMessage({ error: true, text: e instanceof ProfileError ? e.message : `Could not read ${file.name}.` })
+    }
+  }
 
   const setStar = (i: number, patch: Partial<StarConfig>) =>
     onChange({ ...config, stars: stars.map((s, j) => (j === i ? { ...s, ...patch } : s)) })
@@ -45,6 +64,7 @@ export function ConfigPanel({ config, onChange }: Props) {
             onChange={(e) => {
               const preset = PRESETS[+e.target.value]
               if (preset) onChange(structuredClone(preset.config))
+              setMessage(null)
             }}
           >
             <option value="">Choose…</option>
@@ -55,6 +75,26 @@ export function ConfigPanel({ config, onChange }: Props) {
             ))}
           </select>
         </label>
+        <div className="profile-buttons">
+          <button type="button" onClick={() => fileInput.current?.click()} title="Load a system from a JSON file">
+            Import JSON…
+          </button>
+          <button type="button" onClick={() => download(profileFileName(config), serializeProfile(config))} title="Save the system in the form as a JSON file">
+            Export JSON
+          </button>
+          <input
+            ref={fileInput}
+            type="file"
+            accept=".json,application/json"
+            hidden
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) void importFile(file)
+              e.target.value = '' // allow importing the same file again
+            }}
+          />
+        </div>
+        {message && <p className={message.error ? 'import-error' : 'hint'}>{message.text}</p>}
         <div className="grid2">
           <NumberField label="Stars" value={stars.length} min={1} max={MAX_STARS} step={1} onChange={setStarCount} />
           <NumberField label="Planets" value={planets.length} min={0} max={MAX_PLANETS} step={1} onChange={setPlanetCount} />

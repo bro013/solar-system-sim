@@ -374,3 +374,19 @@ button.primary {
     display: none;
   }
 }
+
+.profile-buttons {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.profile-buttons button {
+  flex: 1;
+}
+
+.import-error {
+  color: var(--error);
+  font-size: 0.85rem;
+  margin: 0 0 8px;
+}
