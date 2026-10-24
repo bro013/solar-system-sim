@@ -6,7 +6,7 @@ import { SavedSystems, STORAGE_KEY } from '../sim/savedSystems'
 
 interface Props {
   config: SystemConfig
-  /** Replaces the form's contents (not yet applied to the running simulation). */
+  /** Replaces the form's contents and restarts the simulation with them. */
   onLoad: (config: SystemConfig) => void
 }
 
@@ -67,7 +67,7 @@ export function SystemLibrary({ config, onLoad }: Props) {
 
   const importFile = async (file: File) => {
     try {
-      load(parseProfile(await file.text()), null, `Loaded ${file.name}. Press Apply to run it.`)
+      load(parseProfile(await file.text()), null, `Loaded ${file.name}.`)
     } catch (e) {
       setMessage({ error: true, text: e instanceof ProfileError ? e.message : `Could not read ${file.name}.` })
     }
@@ -83,7 +83,7 @@ export function SystemLibrary({ config, onLoad }: Props) {
             const [kind, key] = e.target.value.split(/:(.*)/s)
             if (kind === 'preset') load(structuredClone(PRESETS[+key].config), null, null)
             const s = kind === 'saved' ? saved.find((x) => x.name === key) : undefined
-            if (s) load(structuredClone(s.config), s.name, `Loaded “${s.name}”. Press Apply to run it.`)
+            if (s) load(structuredClone(s.config), s.name, `Loaded “${s.name}”.`)
           }}
         >
           <option value="">Choose…</option>

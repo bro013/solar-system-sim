@@ -36,12 +36,21 @@ export default function App() {
 
   const viewProps = { sim, running, yearsPerSecond, showTrails, showLabels, follow, onStats: setStats }
 
-  const apply = () => {
-    if (errors.length) return
-    setSim(new Simulation(config))
-    setApplied(config)
+  const start = (next: SystemConfig) => {
+    setSim(new Simulation(next))
+    setApplied(next)
     setFollow(null)
     setStats(null)
+  }
+
+  const apply = () => {
+    if (!errors.length) start(config)
+  }
+
+  /** A system loaded from a preset, saved system or file runs straight away; form edits wait for Apply. */
+  const load = (next: SystemConfig) => {
+    setConfig(next)
+    if (!validate(next).length) start(next)
   }
 
   return (
@@ -51,7 +60,7 @@ export default function App() {
           <h1>Solar System Simulator</h1>
           <p className="hint">Newtonian N-body · masses in M☉ / M⊕ · radii in R☉ / R⊕ · distances in AU</p>
         </header>
-        <ConfigPanel config={config} onChange={setConfig} />
+        <ConfigPanel config={config} onChange={setConfig} onLoad={load} />
         <div className="apply-bar">
           {errors.length > 0 && (
             <ul className="errors">

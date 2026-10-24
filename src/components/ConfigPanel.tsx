@@ -6,7 +6,10 @@ import { SystemLibrary } from './SystemLibrary'
 
 interface Props {
   config: SystemConfig
+  /** An edit to the system in the form. */
   onChange: (config: SystemConfig) => void
+  /** A different system was loaded (preset, saved or imported). */
+  onLoad: (config: SystemConfig) => void
 }
 
 function resize<T>(list: T[], count: number, make: (i: number, prev?: T) => T): T[] {
@@ -15,7 +18,7 @@ function resize<T>(list: T[], count: number, make: (i: number, prev?: T) => T): 
   return next
 }
 
-export function ConfigPanel({ config, onChange }: Props) {
+export function ConfigPanel({ config, onChange, onLoad }: Props) {
   const { stars, planets } = config
 
   const setStar = (i: number, patch: Partial<StarConfig>) =>
@@ -36,7 +39,7 @@ export function ConfigPanel({ config, onChange }: Props) {
     <div className="config">
       {/* Pinned, so loading, saving and the counts stay reachable while the list of bodies scrolls. */}
       <section className="config-top">
-        <SystemLibrary config={config} onLoad={onChange} />
+        <SystemLibrary config={config} onLoad={onLoad} />
         <div className="grid2">
           <NumberField label="Stars" value={stars.length} min={1} max={MAX_STARS} step={1} onChange={setStarCount} />
           <NumberField label="Planets" value={planets.length} min={0} max={MAX_PLANETS} step={1} onChange={setPlanetCount} />
