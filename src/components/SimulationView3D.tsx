@@ -14,6 +14,7 @@ import {
   listenForZoomKeys,
   niceLength,
   pickBody,
+  PREVIEW_CROSS_SIZE,
   STARFIELD_COLOR,
   STARFIELD_POINT_SIZE,
   STATS_INTERVAL_MS,
@@ -133,9 +134,10 @@ export default function SimulationView3D(props: ViewProps) {
 
     /** Dashed lines for previewed orbits: rebuilt when the previews change, moved with their hosts every frame. */
     let previewsFor: OrbitPreview[] | null = null
-    let previewLines: { line: THREE.Line; host: PlanetHost }[] = []
+    let previewLines: { line: THREE.Line; cross: CSS2DObject; host: PlanetHost }[] = []
     const disposePreviews = () => {
-      for (const { line } of previewLines) {
+      for (const { line, cross } of previewLines) {
+        cross.element.remove()
         world.remove(line)
         line.geometry.dispose()
         ;(line.material as THREE.Material).dispose()
@@ -158,8 +160,16 @@ export default function SimulationView3D(props: ViewProps) {
         material.dashSize = distances.getX(distances.count - 1) / 120
         material.gapSize = material.dashSize * 0.8
         line.frustumCulled = false
+        // A screen-sized cross at the ellipse's centre, drawn by the label renderer and moved with the line.
+        const div = document.createElement('div')
+        div.className = 'preview-cross'
+        div.style.color = orbit.color
+        div.style.width = div.style.height = `${2 * PREVIEW_CROSS_SIZE}px`
+        const cross = new CSS2DObject(div)
+        toScene(cross.position, ...orbit.centre)
+        line.add(cross)
         world.add(line)
-        previewLines.push({ line, host: orbit.host })
+        previewLines.push({ line, cross, host: orbit.host })
       }
       previewsFor = previews
     }
@@ -355,9 +365,11 @@ export default function SimulationView3D(props: ViewProps) {
       }
 
       if (p.previewOrbits !== previewsFor) buildPreviews(p.previewOrbits)
-      for (const { line, host } of previewLines) {
+      for (const { line, cross, host } of previewLines) {
         const at = hostPosition(sim, host)
         line.visible = at !== null
+        // The label renderer checks each object's own visibility, not its parent's.
+        cross.visible = line.visible
         if (at) toScene(line.position, at[0] - origin[0], at[1] - origin[1], at[2] - origin[2])
       }
 

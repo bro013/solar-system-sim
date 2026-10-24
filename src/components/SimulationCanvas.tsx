@@ -9,6 +9,7 @@ import {
   listenForZoomKeys,
   niceLength,
   pickBody,
+  PREVIEW_CROSS_SIZE,
   STARFIELD_COLOR,
   STARFIELD_POINT_SIZE,
   STATS_INTERVAL_MS,
@@ -151,6 +152,19 @@ export function SimulationCanvas(props: ViewProps) {
           ctx.stroke()
         }
         ctx.setLineDash([])
+        for (const orbit of p.previewOrbits) {
+          const host = hostPosition(sim, orbit.host)
+          if (!host) continue
+          const x = sx(host[0] + orbit.centre[0]), y = sy(host[1] + orbit.centre[1])
+          const s = PREVIEW_CROSS_SIZE
+          ctx.strokeStyle = orbit.color
+          ctx.beginPath()
+          ctx.moveTo(x - s, y)
+          ctx.lineTo(x + s, y)
+          ctx.moveTo(x, y - s)
+          ctx.lineTo(x, y + s)
+          ctx.stroke()
+        }
       }
 
       // Hit-tested against the last frame's positions, so a body moving under a still mouse lights up too.

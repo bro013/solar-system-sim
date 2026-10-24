@@ -385,6 +385,32 @@ button.primary {
   color: #ffffff;
 }
 
+/* The cross at a previewed orbit's centre in 3D; its colour and size are set inline to match the 2D one. */
+.preview-cross {
+  position: relative;
+}
+
+.preview-cross::before,
+.preview-cross::after {
+  content: '';
+  position: absolute;
+  background: currentColor;
+}
+
+.preview-cross::before {
+  left: 0;
+  right: 0;
+  top: calc(50% - 0.75px);
+  height: 1.5px;
+}
+
+.preview-cross::after {
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 0.75px);
+  width: 1.5px;
+}
+
 .grid-label {
   position: absolute;
   left: 16px;

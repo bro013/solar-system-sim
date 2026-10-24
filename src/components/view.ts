@@ -1,5 +1,5 @@
 import type { Vec3 } from '../physics/nbody'
-import { planetColor, planetOrbitPath, type PlanetConfig, type PlanetHost, type SystemConfig } from '../physics/setup'
+import { planetColor, planetOrbitCentre, planetOrbitPath, type PlanetConfig, type PlanetHost, type SystemConfig } from '../physics/setup'
 import type { Simulation, Stats } from '../sim/simulation'
 import { EARTH_RADIUS } from '../physics/units'
 
@@ -74,6 +74,8 @@ export interface OrbitPreview {
   host: PlanetHost
   /** AU, relative to the host; from planetOrbitPath. */
   path: Vec3[]
+  /** Centre of the ellipse, marked with a cross; AU relative to the host. */
+  centre: Vec3
   color: string
 }
 
@@ -85,7 +87,7 @@ export function orbitPreviews(config: SystemConfig, applied: SystemConfig): Orbi
     const running = applied.planets[i]
     if (running && ORBIT_FIELDS.every((k) => p[k] === running[k])) return []
     const path = planetOrbitPath(p)
-    return path.length ? [{ host: p.host, path, color: planetColor(i) }] : []
+    return path.length ? [{ host: p.host, path, centre: planetOrbitCentre(p), color: planetColor(i) }] : []
   })
 }
 
@@ -211,6 +213,8 @@ export function listenForDoubleClicks(el: HTMLElement, onDoubleClick: (x: number
 export const STATS_INTERVAL_MS = 250
 /** Height reserved for the toolbar overlay; the view is centred in the space below it. */
 export const TOP_INSET = 70
+/** Half the width of the cross marking a previewed orbit's centre, in CSS px. */
+export const PREVIEW_CROSS_SIZE = 6
 /** Background stars in both views: colour, and size in CSS px. */
 export const STARFIELD_COLOR = '#8890b0'
 export const STARFIELD_POINT_SIZE = 1.5

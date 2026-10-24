@@ -140,6 +140,15 @@ export function planetOrbitPath(p: PlanetConfig, points = 180): Vec3[] {
   return path
 }
 
+/**
+ * Centre of a planet's orbital ellipse in AU relative to its host, halfway between periapsis and apoapsis.
+ * The host sits at a focus, a·e from the centre, so the two coincide only for a circular orbit.
+ */
+export function planetOrbitCentre(p: PlanetConfig): Vec3 {
+  const rotate = orbitPlane({ a: p.distance, e: p.eccentricity, angle: p.angle, inclination: p.inclination, node: p.node })
+  return rotate(-p.distance * p.eccentricity, 0)
+}
+
 /** The colour planet `index` is drawn in. */
 export const planetColor = (index: number) => PLANET_COLORS[index % PLANET_COLORS.length]
 

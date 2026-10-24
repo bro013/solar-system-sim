@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { NBody, type Vec3 } from './nbody'
 import { PRESETS } from './presets'
-import { buildBodies, createSystem, planetOrbitPath, suggestedTimeStep, type PlanetConfig, type SystemConfig } from './setup'
+import { buildBodies, createSystem, planetOrbitCentre, planetOrbitPath, suggestedTimeStep, type PlanetConfig, type SystemConfig } from './setup'
 import { EARTH_MASS } from './units'
 
 const earth: PlanetConfig = { name: 'Earth', mass: 1, radius: 1, host: 0, distance: 1, eccentricity: 0, angle: 0, inclination: 0, node: 0 }
@@ -147,5 +147,18 @@ describe('planetOrbitPath', () => {
   it('is empty for orbits that cannot be drawn', () => {
     expect(planetOrbitPath({ ...earth, eccentricity: 1 })).toEqual([])
     expect(planetOrbitPath({ ...earth, distance: 0 })).toEqual([])
+  })
+})
+
+describe('planetOrbitCentre', () => {
+  it('is halfway between periapsis and apoapsis', () => {
+    const p = { ...earth, distance: 2, eccentricity: 0.3, angle: 40, inclination: 25, node: 70 }
+    const path = planetOrbitPath(p, 180)
+    const centre = planetOrbitCentre(p)
+    centre.forEach((c, k) => expect(c).toBeCloseTo((path[0][k] + path[90][k]) / 2, 12))
+  })
+
+  it('is the host for a circular orbit', () => {
+    planetOrbitCentre({ ...earth, distance: 3 }).forEach((c) => expect(c).toBeCloseTo(0, 12))
   })
 })
