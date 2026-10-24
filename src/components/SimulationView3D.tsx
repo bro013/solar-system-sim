@@ -4,7 +4,21 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js'
 import type { Vec3 } from '../physics/nbody'
 import type { Simulation } from '../sim/simulation'
-import { displayRadius, formatAU, listenForZoomKeys, niceLength, STATS_INTERVAL_MS, TOP_INSET, ZOOM_STEP, type CameraView, type ViewProps } from './view'
+import {
+  displayRadius,
+  formatAU,
+  listenForClicks,
+  listenForHover,
+  listenForZoomKeys,
+  niceLength,
+  pickBody,
+  STATS_INTERVAL_MS,
+  TOP_INSET,
+  ZOOM_STEP,
+  type CameraView,
+  type ScreenBody,
+  type ViewProps,
+} from './view'
 
 const FOV = 50
 /** Initial camera tilt from straight above the orbital plane, in degrees. */
@@ -208,9 +222,18 @@ export default function SimulationView3D(props: ViewProps) {
     }
 
     const stopKeys = listenForZoomKeys((f) => zoomBy(controls, f), () => propsRef.current.camera.reset())
+    /** Bodies drawn in the last frame, for picking one with a click or hover. */
+    let onScreen: ScreenBody[] = []
+    const stopClicks = listenForClicks(renderer.domElement, (x, y) => {
+      const id = pickBody(onScreen, x, y)
+      propsRef.current.onSelect(id)
+    })
+    let hoverPoint: { x: number; y: number } | null = null
+    const stopHover = listenForHover(renderer.domElement, (point) => (hoverPoint = point))
 
     const v = new THREE.Vector3()
-    let placed = false
+    /** The shared camera's revision the 3D camera was last moved to; it follows the controls in between. */
+    let placedRevision = -1
     let frame = 0
     let last = performance.now()
     let lastStats = 0
@@ -228,9 +251,9 @@ export default function SimulationView3D(props: ViewProps) {
       const { pos, radius, info, n } = sim.system
       const fi = p.follow === null ? -1 : info.findIndex((b) => b.id === p.follow)
       const origin: Vec3 = fi >= 0 ? [pos[3 * fi], pos[3 * fi + 1], pos[3 * fi + 2]] : [0, 0, 0]
-      if (!placed || !p.camera.get()) {
+      if (placedRevision !== p.camera.revision) {
         place(sim, origin, p.camera.get())
-        placed = true
+        placedRevision = p.camera.revision
       }
       controls.update()
       if (grid) toScene(grid.position, -origin[0], -origin[1], -origin[2])
@@ -250,6 +273,14 @@ export default function SimulationView3D(props: ViewProps) {
       stars.position.copy(camera.position)
       stars.scale.setScalar(dist * 5e3)
 
+      // Project with this frame's camera; the renderer would otherwise only update it while rendering.
+      camera.updateMatrixWorld()
+      const w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight
+      // Hit-tested against the last frame's positions, so a body moving under a still mouse lights up too.
+      const hovered = hoverPoint ? pickBody(onScreen, hoverPoint.x, hoverPoint.y) : null
+      const cursor = hovered === null ? '' : 'pointer'
+      if (renderer.domElement.style.cursor !== cursor) renderer.domElement.style.cursor = cursor
+      const drawn: ScreenBody[] = []
       const alive = new Set<number>()
       for (let i = 0; i < n; i++) {
         const o = bodies.get(info[i].id)
@@ -261,12 +292,22 @@ export default function SimulationView3D(props: ViewProps) {
         const r = displayRadius(radius[i], pxPerAU) / pxPerAU
         o.mesh.scale.setScalar(r)
         o.label.visible = p.showLabels
+        const isHovered = info[i].id === hovered
+        o.label.element.classList.toggle('hovered', isHovered)
         if (o.glow) {
+          // Stars are drawn at full brightness already, so a hovered star gets a larger glow instead.
           o.glow.position.copy(o.mesh.position)
-          o.glow.scale.setScalar(r * 6)
+          o.glow.scale.setScalar(r * (isHovered ? 10 : 6))
+        } else {
+          // Lit from inside as well as by the stars, so the night side brightens too.
+          const material = o.mesh.material as THREE.MeshStandardMaterial
+          material.emissive.copy(material.color).multiplyScalar(isHovered ? 0.6 : 0)
         }
         o.light?.position.copy(o.mesh.position)
+        v.copy(o.mesh.position).project(camera)
+        if (v.z < 1) drawn.push({ id: info[i].id, x: ((v.x + 1) / 2) * w, y: ((1 - v.y) / 2) * h, r: r * pxPerAU })
       }
+      onScreen = drawn
       for (const [id, o] of bodies) {
         if (!alive.has(id)) {
           disposeBody(o)
@@ -312,6 +353,8 @@ export default function SimulationView3D(props: ViewProps) {
       cancelAnimationFrame(frame)
       observer.disconnect()
       stopKeys()
+      stopClicks()
+      stopHover()
       controls.dispose()
       for (const o of bodies.values()) disposeBody(o)
       grid?.dispose()

@@ -33,11 +33,16 @@ export default function App() {
   const viewportRef = useRef<HTMLElement>(null)
   const [fullscreen, setFullscreen] = useState(false)
   const [camera] = useState(() => new SharedCamera())
+  /** The body whose card the side panel should bring into view; a new object each click, so a repeat click works. */
+  const [focusBody, setFocusBody] = useState<{ id: number } | null>(null)
 
-  // A new system or a different body to centre on starts from a view that fits everything.
+  // A new system starts from a view that fits everything; centring on another body keeps the zoom.
   useEffect(() => {
     camera.reset()
-  }, [camera, sim, follow])
+  }, [camera, sim])
+  useEffect(() => {
+    camera.recentre()
+  }, [camera, follow])
 
   // Follow the browser's state too, since Esc leaves fullscreen without going through the button.
   useEffect(() => {
@@ -55,7 +60,13 @@ export default function App() {
   const dirty = config !== applied
   const yearsPerSecond = 10 ** speedLog
 
-  const viewProps = { sim, camera, running, yearsPerSecond, showTrails, showLabels, follow, onStats: setStats }
+  /** Following a body (by clicking it or from Centre on) brings its card in the side panel into focus; null is the barycentre. */
+  const select = (id: number | null) => {
+    setFollow(id)
+    if (id !== null) setFocusBody({ id })
+  }
+
+  const viewProps = { sim, camera, running, yearsPerSecond, showTrails, showLabels, follow, onStats: setStats, onSelect: select }
 
   const start = (next: SystemConfig) => {
     setSim(new Simulation(next))
@@ -81,7 +92,7 @@ export default function App() {
           <h1>Solar System Simulator</h1>
           <p className="hint">Newtonian N-body · masses in M☉ / M⊕ · radii in R☉ / R⊕ · distances in AU</p>
         </header>
-        <ConfigPanel config={config} onChange={setConfig} onApply={applyNow} />
+        <ConfigPanel config={config} onChange={setConfig} onApply={applyNow} selected={follow} focus={focusBody} />
         <div className="apply-bar">
           {errors.length > 0 && (
             <ul className="errors">
@@ -136,7 +147,7 @@ export default function App() {
           </label>
           <label>
             Centre on{' '}
-            <select value={follow ?? ''} onChange={(e) => setFollow(e.target.value === '' ? null : +e.target.value)}>
+            <select value={follow ?? ''} onChange={(e) => select(e.target.value === '' ? null : +e.target.value)}>
               <option value="">Barycentre</option>
               {sim.system.info.map((b) => (
                 <option key={b.id} value={b.id}>

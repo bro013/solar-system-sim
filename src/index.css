@@ -142,6 +142,16 @@ select:focus {
   margin: 0 0 10px;
 }
 
+/* The followed body's card; it is also focused when the body is clicked in the view. */
+.body-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.body-card:focus {
+  outline: none;
+}
+
 .body-card legend {
   padding: 0 4px;
 }
@@ -335,6 +345,10 @@ button.primary {
   color: #c8cbe0;
   font-size: 12px;
   white-space: nowrap;
+}
+
+.label-3d.hovered {
+  color: #ffffff;
 }
 
 .grid-label {

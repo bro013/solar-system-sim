@@ -20,18 +20,32 @@ export interface CameraView {
 export class SharedCamera {
   /** Null until a view fits the system to the screen. */
   private view: CameraView | null = null
+  private changes = 0
 
   get() {
     return this.view
   }
 
+  /** The view in use reporting where it looks. */
   set(view: CameraView) {
     this.view = view
+  }
+
+  /** Counts reset() and recentre() calls, so the 3D view knows to move its camera to match. */
+  get revision() {
+    return this.changes
   }
 
   /** Makes the view in use fit the whole system on its next frame. */
   reset() {
     this.view = null
+    this.changes++
+  }
+
+  /** Centres on the newly followed body (or the barycentre), keeping the zoom and the 3D viewing direction. */
+  recentre() {
+    if (this.view) this.view = { ...this.view, cx: 0, cy: 0 }
+    this.changes++
   }
 }
 
@@ -46,6 +60,87 @@ export interface ViewProps {
   /** Body id to keep centred, or null for the system barycentre. */
   follow: number | null
   onStats: (stats: Stats) => void
+  /** A body was clicked or tapped, or empty space (null). */
+  onSelect: (id: number | null) => void
+}
+
+/** Where a body was last drawn: centre and radius in CSS px from the view's top-left corner. */
+export interface ScreenBody {
+  id: number
+  x: number
+  y: number
+  r: number
+}
+
+/** Clicks this many px outside a body still pick it, so small planets are easy to hit. */
+const PICK_MARGIN = 8
+/** A press that moves further than this many px is a drag, not a click. */
+const CLICK_TOLERANCE = 4
+
+/** The id of the body nearest to (x, y) within reach of a click, or null. */
+export function pickBody(bodies: ScreenBody[], x: number, y: number): number | null {
+  let best: number | null = null
+  let bestDistance = Infinity
+  for (const b of bodies) {
+    const d = Math.hypot(b.x - x, b.y - y)
+    if (d <= b.r + PICK_MARGIN && d < bestDistance) {
+      best = b.id
+      bestDistance = d
+    }
+  }
+  return best
+}
+
+/**
+ * Reports where the mouse is over `el` (relative to it) while no button is held, or null when it leaves or
+ * starts a drag, for hover effects. Touch has no hover, so it is ignored. Returns a cleanup function.
+ */
+export function listenForHover(el: HTMLElement, onHover: (point: { x: number; y: number } | null) => void) {
+  const onMove = (e: PointerEvent) => {
+    if (e.pointerType !== 'mouse') return
+    if (e.buttons) return onHover(null)
+    const rect = el.getBoundingClientRect()
+    onHover({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+  }
+  const onLeave = () => onHover(null)
+  el.addEventListener('pointermove', onMove)
+  el.addEventListener('pointerleave', onLeave)
+  return () => {
+    el.removeEventListener('pointermove', onMove)
+    el.removeEventListener('pointerleave', onLeave)
+  }
+}
+
+/**
+ * Calls `onClick` with coordinates relative to `el` for primary presses that end where they started, so
+ * drags, pans and pinches don't count. Returns a cleanup function.
+ */
+export function listenForClicks(el: HTMLElement, onClick: (x: number, y: number) => void) {
+  const starts = new Map<number, { x: number; y: number }>()
+  /** Set once a second pointer goes down, until all are up: a pinch is never a click. */
+  let multiTouch = false
+  const onDown = (e: PointerEvent) => {
+    starts.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (starts.size > 1) multiTouch = true
+  }
+  const onEnd = (e: PointerEvent) => {
+    const start = starts.get(e.pointerId)
+    starts.delete(e.pointerId)
+    const wasMultiTouch = multiTouch
+    if (starts.size === 0) multiTouch = false
+    if (e.type !== 'pointerup' || !start || wasMultiTouch || e.button !== 0) return
+    if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > CLICK_TOLERANCE) return
+    const rect = el.getBoundingClientRect()
+    onClick(e.clientX - rect.left, e.clientY - rect.top)
+  }
+  el.addEventListener('pointerdown', onDown)
+  el.addEventListener('pointerup', onEnd)
+  el.addEventListener('pointercancel', onEnd)
+  return () => {
+    el.removeEventListener('pointerdown', onDown)
+    el.removeEventListener('pointerup', onEnd)
+    el.removeEventListener('pointercancel', onEnd)
+  }
 }
 
 export const STATS_INTERVAL_MS = 250

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { defaultPlanet, defaultStar } from '../physics/presets'
 import { MAX_PLANETS, MAX_STARS, type PlanetConfig, type PlanetHost, type StarConfig, type SystemConfig } from '../physics/setup'
 import { mainSequenceRadius } from '../physics/units'
@@ -10,10 +11,40 @@ interface Props {
   onChange: (config: SystemConfig) => void
   /** A change to run straight away: loading a system, or adding or removing a body with + or −. */
   onApply: (config: SystemConfig) => void
+  /** Body id whose card is highlighted (the followed body). Ids count the stars first, then the planets. */
+  selected: number | null
+  /** Body whose card to scroll into view and focus; a new object asks again. */
+  focus: { id: number } | null
 }
 
-export function ConfigPanel({ config, onChange, onApply }: Props) {
+export function ConfigPanel({ config, onChange, onApply, selected, focus }: Props) {
   const { stars, planets } = config
+  const scrollBox = useRef<HTMLDivElement>(null)
+  const pinnedTop = useRef<HTMLElement>(null)
+  /** Card elements by body id. */
+  const cards = useRef(new Map<number, HTMLFieldSetElement>())
+  const cardRef = (id: number) => (el: HTMLFieldSetElement) => {
+    cards.current.set(id, el)
+    return () => {
+      cards.current.delete(id)
+    }
+  }
+
+  useEffect(() => {
+    const card = focus && cards.current.get(focus.id)
+    const box = scrollBox.current
+    if (!card || !box) return
+    // Scroll only the panel's own list. On narrow screens it doesn't scroll by itself, and the page
+    // shouldn't jump away from the view that was just clicked.
+    if (box.scrollHeight > box.clientHeight) {
+      const below = card.getBoundingClientRect().top - box.getBoundingClientRect().top
+      const pinned = pinnedTop.current?.offsetHeight ?? 0
+      box.scrollTo({ top: box.scrollTop + below - pinned - 8, behavior: 'smooth' })
+    }
+    card.focus({ preventScroll: true })
+  }, [focus])
+
+  const cardClass = (id: number) => (id === selected ? 'body-card selected' : 'body-card')
 
   const setStar = (i: number, patch: Partial<StarConfig>) =>
     onChange({ ...config, stars: stars.map((s, j) => (j === i ? { ...s, ...patch } : s)) })
@@ -32,9 +63,9 @@ export function ConfigPanel({ config, onChange, onApply }: Props) {
   const removePlanet = (i: number) => onApply({ ...config, planets: planets.filter((_, j) => j !== i) })
 
   return (
-    <div className="config">
+    <div className="config" ref={scrollBox}>
       {/* Pinned, so loading, saving and adding bodies stay reachable while the list of bodies scrolls. */}
-      <section className="config-top">
+      <section className="config-top" ref={pinnedTop}>
         <SystemLibrary config={config} onLoad={onApply} />
         <div className="grid2">
           <button
@@ -64,7 +95,7 @@ export function ConfigPanel({ config, onChange, onApply }: Props) {
 
       <h2>Stars</h2>
       {stars.map((s, i) => (
-        <fieldset key={i} className="body-card">
+        <fieldset key={i} ref={cardRef(i)} tabIndex={-1} className={cardClass(i)}>
           <legend>
             <input className="name" value={s.name} onChange={(e) => setStar(i, { name: e.target.value })} aria-label="Star name" />
           </legend>
@@ -109,7 +140,7 @@ export function ConfigPanel({ config, onChange, onApply }: Props) {
       <h2>Planets</h2>
       {planets.length === 0 && <p className="hint">No planets. Press Planet + to add one.</p>}
       {planets.map((p, i) => (
-        <fieldset key={i} className="body-card">
+        <fieldset key={i} ref={cardRef(stars.length + i)} tabIndex={-1} className={cardClass(stars.length + i)}>
           <legend>
             <input className="name" value={p.name} onChange={(e) => setPlanet(i, { name: e.target.value })} aria-label="Planet name" />
           </legend>

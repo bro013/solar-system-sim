@@ -1,6 +1,20 @@
 import { useEffect, useRef } from 'react'
 import type { Simulation } from '../sim/simulation'
-import { displayRadius, formatAU, listenForZoomKeys, niceLength, STATS_INTERVAL_MS, TOP_INSET, ZOOM_STEP, type CameraView, type ViewProps } from './view'
+import {
+  displayRadius,
+  formatAU,
+  listenForClicks,
+  listenForHover,
+  listenForZoomKeys,
+  niceLength,
+  pickBody,
+  STATS_INTERVAL_MS,
+  TOP_INSET,
+  ZOOM_STEP,
+  type CameraView,
+  type ScreenBody,
+  type ViewProps,
+} from './view'
 
 /** Zoom limits in px per AU: ~100 000 AU across the screen to a planet filling it. */
 const MIN_SCALE = 1e-2
@@ -9,6 +23,10 @@ const MAX_SCALE = 1e8
 export function SimulationCanvas(props: ViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const propsRef = useRef(props)
+  /** Bodies drawn in the last frame, for picking one with a click or hover. */
+  const onScreen = useRef<ScreenBody[]>([])
+  /** Mouse position over the canvas while hovering, or null. */
+  const hoverPoint = useRef<{ x: number; y: number } | null>(null)
 
   useEffect(() => {
     propsRef.current = props
@@ -89,29 +107,45 @@ export function SimulationCanvas(props: ViewProps) {
         ctx.globalAlpha = 1
       }
 
+      // Hit-tested against the last frame's positions, so a body moving under a still mouse lights up too.
+      const hover = hoverPoint.current
+      const hovered = hover ? pickBody(onScreen.current, hover.x, hover.y) : null
+      const cursor = hovered === null ? '' : 'pointer'
+      if (canvas.style.cursor !== cursor) canvas.style.cursor = cursor
+
       ctx.font = '12px system-ui, sans-serif'
+      const drawn: ScreenBody[] = []
       for (let i = 0; i < n; i++) {
         const x = sx(pos[3 * i]), y = sy(pos[3 * i + 1])
         const r = displayRadius(radius[i], scale)
         if (x < -50 - r || y < -50 - r || x > w + 50 + r || y > h + 50 + r) continue
-        if (info[i].kind === 'star') {
-          const glow = ctx.createRadialGradient(x, y, r * 0.5, x, y, r * 3)
-          glow.addColorStop(0, info[i].color + '80')
+        drawn.push({ id: info[i].id, x, y, r })
+        const isHovered = info[i].id === hovered
+        // Stars always glow; a hovered body gets a wider glow of its own.
+        if (info[i].kind === 'star' || isHovered) {
+          const reach = isHovered ? 4 : 3
+          const glow = ctx.createRadialGradient(x, y, r * 0.5, x, y, r * reach)
+          glow.addColorStop(0, info[i].color + (isHovered ? 'c0' : '80'))
           glow.addColorStop(1, info[i].color + '00')
           ctx.fillStyle = glow
           ctx.beginPath()
-          ctx.arc(x, y, r * 3, 0, 2 * Math.PI)
+          ctx.arc(x, y, r * reach, 0, 2 * Math.PI)
           ctx.fill()
         }
         ctx.fillStyle = info[i].color
         ctx.beginPath()
         ctx.arc(x, y, r, 0, 2 * Math.PI)
         ctx.fill()
+        if (isHovered) {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.4)'
+          ctx.fill()
+        }
         if (p.showLabels) {
-          ctx.fillStyle = '#c8cbe0'
+          ctx.fillStyle = isHovered ? '#ffffff' : '#c8cbe0'
           ctx.fillText(info[i].name, x + r + 4, y - r - 2)
         }
       }
+      onScreen.current = drawn
 
       const bar = niceLength(w / 4 / scale)
       ctx.strokeStyle = '#c8cbe0'
@@ -199,7 +233,14 @@ export function SimulationCanvas(props: ViewProps) {
     canvas.addEventListener('wheel', onWheel, { passive: false })
     canvas.addEventListener('dblclick', onDoubleClick)
     const stopKeys = listenForZoomKeys((f) => zoomAt(0, 0, f), () => propsRef.current.camera.reset())
+    const stopClicks = listenForClicks(canvas, (x, y) => {
+      const id = pickBody(onScreen.current, x, y)
+      propsRef.current.onSelect(id)
+    })
+    const stopHover = listenForHover(canvas, (point) => (hoverPoint.current = point))
     return () => {
+      stopClicks()
+      stopHover()
       canvas.removeEventListener('pointerdown', onDown)
       canvas.removeEventListener('pointermove', onMove)
       canvas.removeEventListener('pointerup', onUp)
