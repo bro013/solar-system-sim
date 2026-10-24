@@ -1,14 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { Simulation } from '../sim/simulation'
-import { displayRadius, formatAU, listenForZoomKeys, niceLength, STATS_INTERVAL_MS, TOP_INSET, ZOOM_STEP, type ViewProps } from './view'
-
-interface Camera {
-  /** View centre in AU, relative to the followed body (or the origin). */
-  cx: number
-  cy: number
-  /** Pixels per AU. */
-  scale: number
-}
+import { displayRadius, formatAU, listenForZoomKeys, niceLength, STATS_INTERVAL_MS, TOP_INSET, ZOOM_STEP, type CameraView, type ViewProps } from './view'
 
 /** Zoom limits in px per AU: ~100 000 AU across the screen to a planet filling it. */
 const MIN_SCALE = 1e-2
@@ -17,16 +9,10 @@ const MAX_SCALE = 1e8
 export function SimulationCanvas(props: ViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const propsRef = useRef(props)
-  const camera = useRef<Camera>({ cx: 0, cy: 0, scale: 100 })
-  const needsFit = useRef(true)
 
   useEffect(() => {
     propsRef.current = props
   })
-
-  useEffect(() => {
-    needsFit.current = true
-  }, [props.sim, props.follow])
 
   useEffect(() => {
     const canvas = canvasRef.current!
@@ -47,11 +33,11 @@ export function SimulationCanvas(props: ViewProps) {
     const followIndex = (sim: Simulation, follow: number | null) =>
       follow === null ? -1 : sim.system.info.findIndex((b) => b.id === follow)
 
-    const fit = (sim: Simulation, origin: [number, number], w: number, h: number) => {
+    const fit = (sim: Simulation, origin: [number, number], w: number, h: number): CameraView => {
       const { pos, n } = sim.system
       let r = 0
       for (let i = 0; i < n; i++) r = Math.max(r, Math.hypot(pos[3 * i] - origin[0], pos[3 * i + 1] - origin[1]))
-      camera.current = { cx: 0, cy: 0, scale: (0.45 * Math.min(w, h - TOP_INSET)) / (r || 1) }
+      return { cx: 0, cy: 0, scale: (0.45 * Math.min(w, h - TOP_INSET)) / (r || 1) }
     }
 
     const draw = (now: number) => {
@@ -73,11 +59,10 @@ export function SimulationCanvas(props: ViewProps) {
       const fi = followIndex(sim, p.follow)
       // Top-down view of the reference plane: z (height above it) is not shown.
       const origin: [number, number] = fi >= 0 ? [pos[3 * fi], pos[3 * fi + 1]] : [0, 0]
-      if (needsFit.current && w > 0) {
-        fit(sim, origin, w, h)
-        needsFit.current = false
-      }
-      const { cx, cy, scale } = camera.current
+      if (!p.camera.get() && w > 0) p.camera.set(fit(sim, origin, w, h))
+      const view = p.camera.get()
+      if (!view) return
+      const { cx, cy, scale } = view
       const sx = (x: number) => w / 2 + (x - origin[0] - cx) * scale
       const sy = (y: number) => (h + TOP_INSET) / 2 - (y - origin[1] - cy) * scale
 
@@ -153,11 +138,11 @@ export function SimulationCanvas(props: ViewProps) {
 
   /** Zooms by `factor`, keeping the point (mx, my) px from the view centre fixed on screen. */
   const zoomAt = (mx: number, my: number, factor: number) => {
-    const cam = camera.current
+    const camera = propsRef.current.camera
+    const cam = camera.get()
+    if (!cam) return
     const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, cam.scale * factor))
-    cam.cx += mx / cam.scale - mx / scale
-    cam.cy -= my / cam.scale - my / scale
-    cam.scale = scale
+    camera.set({ cx: cam.cx + mx / cam.scale - mx / scale, cy: cam.cy - (my / cam.scale - my / scale), scale })
   }
 
   useEffect(() => {
@@ -184,10 +169,10 @@ export function SimulationCanvas(props: ViewProps) {
     const onMove = (e: PointerEvent) => {
       const prev = pointers.get(e.pointerId)
       if (!prev) return
-      if (pointers.size === 1) {
-        const cam = camera.current
-        cam.cx -= (e.clientX - prev.x) / cam.scale
-        cam.cy += (e.clientY - prev.y) / cam.scale
+      const camera = propsRef.current.camera
+      const cam = camera.get()
+      if (pointers.size === 1 && cam) {
+        camera.set({ ...cam, cx: cam.cx - (e.clientX - prev.x) / cam.scale, cy: cam.cy + (e.clientY - prev.y) / cam.scale })
       }
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
       if (pointers.size === 2) {
@@ -213,7 +198,7 @@ export function SimulationCanvas(props: ViewProps) {
     canvas.addEventListener('pointercancel', onUp)
     canvas.addEventListener('wheel', onWheel, { passive: false })
     canvas.addEventListener('dblclick', onDoubleClick)
-    const stopKeys = listenForZoomKeys((f) => zoomAt(0, 0, f), () => (needsFit.current = true))
+    const stopKeys = listenForZoomKeys((f) => zoomAt(0, 0, f), () => propsRef.current.camera.reset())
     return () => {
       canvas.removeEventListener('pointerdown', onDown)
       canvas.removeEventListener('pointermove', onMove)
@@ -235,7 +220,7 @@ export function SimulationCanvas(props: ViewProps) {
         <button type="button" title="Zoom out (−)" aria-label="Zoom out" onClick={() => zoomAt(0, 0, 1 / ZOOM_STEP)}>
           −
         </button>
-        <button type="button" title="Fit whole system (0)" aria-label="Fit view" onClick={() => (needsFit.current = true)}>
+        <button type="button" title="Fit whole system (0)" aria-label="Fit view" onClick={() => props.camera.reset()}>
           ⤢
         </button>
       </div>

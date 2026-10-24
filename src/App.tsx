@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { ConfigPanel } from './components/ConfigPanel'
 import { SimulationCanvas } from './components/SimulationCanvas'
+import { SharedCamera } from './components/view'
 import { PRESETS } from './physics/presets'
 import { validate, type SystemConfig } from './physics/setup'
 import { Simulation, type Stats } from './sim/simulation'
@@ -31,6 +32,12 @@ export default function App() {
   const [view, setView] = useState<'2d' | '3d'>('2d')
   const viewportRef = useRef<HTMLElement>(null)
   const [fullscreen, setFullscreen] = useState(false)
+  const [camera] = useState(() => new SharedCamera())
+
+  // A new system or a different body to centre on starts from a view that fits everything.
+  useEffect(() => {
+    camera.reset()
+  }, [camera, sim, follow])
 
   // Follow the browser's state too, since Esc leaves fullscreen without going through the button.
   useEffect(() => {
@@ -48,7 +55,7 @@ export default function App() {
   const dirty = config !== applied
   const yearsPerSecond = 10 ** speedLog
 
-  const viewProps = { sim, running, yearsPerSecond, showTrails, showLabels, follow, onStats: setStats }
+  const viewProps = { sim, camera, running, yearsPerSecond, showTrails, showLabels, follow, onStats: setStats }
 
   const start = (next: SystemConfig) => {
     setSim(new Simulation(next))

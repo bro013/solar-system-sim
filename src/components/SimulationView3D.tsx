@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js'
 import type { Vec3 } from '../physics/nbody'
 import type { Simulation } from '../sim/simulation'
-import { displayRadius, formatAU, listenForZoomKeys, niceLength, STATS_INTERVAL_MS, TOP_INSET, ZOOM_STEP, type ViewProps } from './view'
+import { displayRadius, formatAU, listenForZoomKeys, niceLength, STATS_INTERVAL_MS, TOP_INSET, ZOOM_STEP, type CameraView, type ViewProps } from './view'
 
 const FOV = 50
 /** Initial camera tilt from straight above the orbital plane, in degrees. */
@@ -73,16 +73,11 @@ export default function SimulationView3D(props: ViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const gridLabelRef = useRef<HTMLDivElement>(null)
   const propsRef = useRef(props)
-  const needsFit = useRef(true)
   const controlsRef = useRef<OrbitControls | null>(null)
 
   useEffect(() => {
     propsRef.current = props
   })
-
-  useEffect(() => {
-    needsFit.current = true
-  }, [props.sim, props.follow])
 
   useEffect(() => {
     const wrap = wrapRef.current!
@@ -176,17 +171,28 @@ export default function SimulationView3D(props: ViewProps) {
     observer.observe(wrap)
     resize()
 
-    const fit = (sim: Simulation, origin: Vec3) => {
+    /** Pixels per scene unit for something at unit distance from the camera. */
+    const focalPx = () => (renderer.domElement.clientHeight + TOP_INSET) / (2 * Math.tan(THREE.MathUtils.degToRad(FOV / 2)))
+
+    /** Points the camera at the shared view, or fits the whole system when there is none, and redraws the grid. */
+    const place = (sim: Simulation, origin: Vec3, view: CameraView | null) => {
       const { pos, n } = sim.system
       let r = 0
       for (let i = 0; i < n; i++) {
         r = Math.max(r, Math.hypot(pos[3 * i] - origin[0], pos[3 * i + 1] - origin[1], pos[3 * i + 2] - origin[2]))
       }
       r ||= 1
-      const dist = (1.15 * r) / Math.tan(THREE.MathUtils.degToRad(FOV / 2))
       const tilt = THREE.MathUtils.degToRad(FIT_TILT)
-      controls.target.set(0, 0, 0)
-      camera.position.set(0, dist * Math.cos(tilt), dist * Math.sin(tilt))
+      if (view) {
+        // The same px per AU at the view centre as the 2D view, looking from the last 3D direction.
+        toScene(controls.target, view.cx, view.cy, 0)
+        const [dx, dy, dz] = view.direction ?? [0, Math.cos(tilt), Math.sin(tilt)]
+        camera.position.set(dx, dy, dz).multiplyScalar(focalPx() / view.scale).add(controls.target)
+      } else {
+        const dist = (1.15 * r) / Math.tan(THREE.MathUtils.degToRad(FOV / 2))
+        controls.target.set(0, 0, 0)
+        camera.position.set(0, dist * Math.cos(tilt), dist * Math.sin(tilt))
+      }
       controls.update()
 
       // A polar grid in the orbital plane, centred on the barycentre, for a sense of depth and scale.
@@ -201,9 +207,10 @@ export default function SimulationView3D(props: ViewProps) {
       if (gridLabelRef.current) gridLabelRef.current.textContent = `Grid rings: ${formatAU(ring)}`
     }
 
-    const stopKeys = listenForZoomKeys((f) => zoomBy(controls, f), () => (needsFit.current = true))
+    const stopKeys = listenForZoomKeys((f) => zoomBy(controls, f), () => propsRef.current.camera.reset())
 
     const v = new THREE.Vector3()
+    let placed = false
     let frame = 0
     let last = performance.now()
     let lastStats = 0
@@ -221,15 +228,22 @@ export default function SimulationView3D(props: ViewProps) {
       const { pos, radius, info, n } = sim.system
       const fi = p.follow === null ? -1 : info.findIndex((b) => b.id === p.follow)
       const origin: Vec3 = fi >= 0 ? [pos[3 * fi], pos[3 * fi + 1], pos[3 * fi + 2]] : [0, 0, 0]
-      if (needsFit.current) {
-        fit(sim, origin)
-        needsFit.current = false
+      if (!placed || !p.camera.get()) {
+        place(sim, origin, p.camera.get())
+        placed = true
       }
       controls.update()
       if (grid) toScene(grid.position, -origin[0], -origin[1], -origin[2])
 
-      // Keep near/far proportional to the viewing distance so any zoom level renders with good depth precision.
       const dist = camera.position.distanceTo(controls.target)
+      const focal = focalPx()
+      if (renderer.domElement.clientHeight > 0) {
+        // Height of the view centre above the plane has no 2D equivalent and is dropped.
+        v.subVectors(camera.position, controls.target).divideScalar(dist)
+        p.camera.set({ cx: controls.target.x, cy: -controls.target.z, scale: focal / dist, direction: [v.x, v.y, v.z] })
+      }
+
+      // Keep near/far proportional to the viewing distance so any zoom level renders with good depth precision.
       camera.near = dist * 1e-4
       camera.far = dist * 1e4
       camera.updateProjectionMatrix()
@@ -237,14 +251,13 @@ export default function SimulationView3D(props: ViewProps) {
       stars.scale.setScalar(dist * 5e3)
 
       const alive = new Set<number>()
-      const pxPerUnitAtDistance = (renderer.domElement.clientHeight + TOP_INSET) / (2 * Math.tan(THREE.MathUtils.degToRad(FOV / 2)))
       for (let i = 0; i < n; i++) {
         const o = bodies.get(info[i].id)
         if (!o) continue
         alive.add(info[i].id)
         toScene(o.mesh.position, pos[3 * i] - origin[0], pos[3 * i + 1] - origin[1], pos[3 * i + 2] - origin[2])
         // Same apparent size as in the 2D view: convert the on-screen radius back to scene units at this distance.
-        const pxPerAU = pxPerUnitAtDistance / Math.max(o.mesh.position.distanceTo(camera.position), 1e-12)
+        const pxPerAU = focal / Math.max(o.mesh.position.distanceTo(camera.position), 1e-12)
         const r = displayRadius(radius[i], pxPerAU) / pxPerAU
         o.mesh.scale.setScalar(r)
         o.label.visible = p.showLabels
@@ -326,7 +339,7 @@ export default function SimulationView3D(props: ViewProps) {
         <button type="button" title="Zoom out (−)" aria-label="Zoom out" onClick={() => zoom(1 / ZOOM_STEP)}>
           −
         </button>
-        <button type="button" title="Fit whole system (0)" aria-label="Fit view" onClick={() => (needsFit.current = true)}>
+        <button type="button" title="Fit whole system (0)" aria-label="Fit view" onClick={() => props.camera.reset()}>
           ⤢
         </button>
       </div>

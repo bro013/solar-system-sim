@@ -1,9 +1,44 @@
+import type { Vec3 } from '../physics/nbody'
 import type { Simulation, Stats } from '../sim/simulation'
 import { EARTH_RADIUS } from '../physics/units'
+
+/** Where the camera looks: the part of the view shared by the 2D and 3D views. */
+export interface CameraView {
+  /** View centre in the reference plane in AU, relative to the followed body (or the barycentre). */
+  cx: number
+  cy: number
+  /** Zoom at the view centre, in px per AU. */
+  scale: number
+  /** Set by the 3D view: unit vector from the view centre to the camera, in scene coordinates. */
+  direction?: Vec3
+}
+
+/**
+ * The current camera view, shared by the 2D and 3D views so switching between them keeps the zoom.
+ * Like Simulation, it lives outside React state and the view in use updates it every frame.
+ */
+export class SharedCamera {
+  /** Null until a view fits the system to the screen. */
+  private view: CameraView | null = null
+
+  get() {
+    return this.view
+  }
+
+  set(view: CameraView) {
+    this.view = view
+  }
+
+  /** Makes the view in use fit the whole system on its next frame. */
+  reset() {
+    this.view = null
+  }
+}
 
 /** Props shared by the 2D and 3D views. Each view drives the simulation while it is mounted. */
 export interface ViewProps {
   sim: Simulation | null
+  camera: SharedCamera
   running: boolean
   yearsPerSecond: number
   showTrails: boolean
