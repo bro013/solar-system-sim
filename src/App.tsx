@@ -32,6 +32,7 @@ export default function App() {
   const [view, setView] = useState<'2d' | '3d'>('2d')
   const viewportRef = useRef<HTMLElement>(null)
   const [fullscreen, setFullscreen] = useState(false)
+  const [panelOpen, setPanelOpen] = useState(true)
   const [camera] = useState(() => new SharedCamera())
   /** The body whose card the side panel should bring into view; a new object each click, so a repeat click works. */
   const [focusBody, setFocusBody] = useState<{ id: number } | null>(null)
@@ -86,11 +87,25 @@ export default function App() {
   }
 
   return (
-    <div className="app">
-      <aside className="panel">
+    <div className={panelOpen ? 'app' : 'app panel-hidden'}>
+      {/* Hidden with CSS rather than unmounted, so the form and its messages are kept while it is closed. */}
+      <aside className="panel" id="side-panel">
         <header>
-          <h1>Solar System Simulator</h1>
-          <p className="hint">Newtonian N-body · masses in M☉ / M⊕ · radii in R☉ / R⊕ · distances in AU</p>
+          <div>
+            <h1>Solar System Simulator</h1>
+            <p className="hint">Newtonian N-body · masses in M☉ / M⊕ · radii in R☉ / R⊕ · distances in AU</p>
+          </div>
+          <button
+            type="button"
+            className="menu-button"
+            title="Hide side panel"
+            aria-label="Hide side panel"
+            aria-controls="side-panel"
+            aria-expanded="true"
+            onClick={() => setPanelOpen(false)}
+          >
+            ☰
+          </button>
         </header>
         <ConfigPanel config={config} onChange={setConfig} onApply={applyNow} selected={follow} focus={focusBody} />
         <div className="apply-bar">
@@ -117,6 +132,19 @@ export default function App() {
         )}
 
         <div className="toolbar">
+          {!panelOpen && (
+            <button
+              type="button"
+              className="menu-button"
+              title="Show side panel"
+              aria-label="Show side panel"
+              aria-controls="side-panel"
+              aria-expanded="false"
+              onClick={() => setPanelOpen(true)}
+            >
+              ☰
+            </button>
+          )}
           <div className="segmented" role="group" aria-label="View">
             {(['2d', '3d'] as const).map((v) => (
               <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)}>

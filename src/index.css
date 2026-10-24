@@ -59,7 +59,26 @@ h2 {
 }
 
 .panel header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
   padding: 16px 16px 8px;
+}
+
+/* The ☰ button that hides the side panel, and the one in the toolbar that shows it again. */
+.menu-button {
+  padding: 4px 10px;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.app.panel-hidden {
+  grid-template-columns: 1fr;
+}
+
+.app.panel-hidden .panel {
+  display: none;
 }
 
 .config {
@@ -301,6 +320,11 @@ button.primary {
   .viewport {
     order: -1;
     height: 60vh;
+  }
+
+  /* With the panel below the view hidden, the view can take the whole screen. */
+  .app.panel-hidden .viewport {
+    height: 100vh;
   }
 
   .panel {
