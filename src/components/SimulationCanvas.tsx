@@ -9,6 +9,8 @@ import {
   listenForZoomKeys,
   niceLength,
   pickBody,
+  STARFIELD_COLOR,
+  STARFIELD_POINT_SIZE,
   STATS_INTERVAL_MS,
   TOP_INSET,
   ZOOM_STEP,
@@ -20,6 +22,29 @@ import {
 /** Zoom limits in px per AU: ~100 000 AU across the screen to a planet filling it. */
 const MIN_SCALE = 1e-2
 const MAX_SCALE = 1e8
+
+/** Background stars per square px, about as many as the 3D view shows through its field of view. */
+const STAR_DENSITY = 1 / 3500
+
+/**
+ * Background stars for a view of this size in CSS px, drawn once into their own canvas. Like the 3D view's,
+ * they are infinitely far away, so they stay put as you pan and zoom. Null for an empty view.
+ */
+function drawStarfield(width: number, height: number, dpr: number) {
+  if (width < 1 || height < 1) return null
+  const stars = document.createElement('canvas')
+  stars.width = Math.round(width * dpr)
+  stars.height = Math.round(height * dpr)
+  const g = stars.getContext('2d')!
+  g.scale(dpr, dpr)
+  g.fillStyle = STARFIELD_COLOR
+  // A fixed seed (Park–Miller generator), so the sky doesn't reshuffle every time the view resizes.
+  let seed = 20240917
+  const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647
+  const count = Math.round(width * height * STAR_DENSITY)
+  for (let i = 0; i < count; i++) g.fillRect(random() * width, random() * height, STARFIELD_POINT_SIZE, STARFIELD_POINT_SIZE)
+  return stars
+}
 
 export function SimulationCanvas(props: ViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -40,10 +65,12 @@ export function SimulationCanvas(props: ViewProps) {
     let last = performance.now()
     let lastStats = 0
 
+    let starfield: HTMLCanvasElement | null = null
     const resize = () => {
       const dpr = window.devicePixelRatio || 1
       canvas.width = Math.round(canvas.clientWidth * dpr)
       canvas.height = Math.round(canvas.clientHeight * dpr)
+      starfield = drawStarfield(canvas.clientWidth, canvas.clientHeight, dpr)
     }
     const observer = new ResizeObserver(resize)
     observer.observe(canvas)
@@ -69,6 +96,7 @@ export function SimulationCanvas(props: ViewProps) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       ctx.fillStyle = '#05060c'
       ctx.fillRect(0, 0, w, h)
+      if (starfield && p.showStars) ctx.drawImage(starfield, 0, 0, w, h)
 
       const sim = p.sim
       if (!sim) return

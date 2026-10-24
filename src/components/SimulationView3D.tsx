@@ -14,6 +14,8 @@ import {
   listenForZoomKeys,
   niceLength,
   pickBody,
+  STARFIELD_COLOR,
+  STARFIELD_POINT_SIZE,
   STATS_INTERVAL_MS,
   TOP_INSET,
   ZOOM_STEP,
@@ -78,7 +80,7 @@ function starfield() {
   }
   const geometry = new THREE.BufferGeometry()
   geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3))
-  const material = new THREE.PointsMaterial({ color: 0x8890b0, size: 1.5, sizeAttenuation: false, depthWrite: false })
+  const material = new THREE.PointsMaterial({ color: STARFIELD_COLOR, size: STARFIELD_POINT_SIZE, sizeAttenuation: false, depthWrite: false })
   const points = new THREE.Points(geometry, material)
   points.renderOrder = -1
   points.frustumCulled = false
@@ -306,6 +308,7 @@ export default function SimulationView3D(props: ViewProps) {
       camera.near = dist * 1e-4
       camera.far = dist * 1e4
       camera.updateProjectionMatrix()
+      stars.visible = p.showStars
       stars.position.copy(camera.position)
       stars.scale.setScalar(dist * 5e3)
 

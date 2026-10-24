@@ -58,6 +58,8 @@ export interface ViewProps {
   yearsPerSecond: number
   showTrails: boolean
   showLabels: boolean
+  /** The background starfield. */
+  showStars: boolean
   /** Body id to keep centred, or null for the system barycentre. */
   follow: number | null
   onStats: (stats: Stats) => void
@@ -209,6 +211,9 @@ export function listenForDoubleClicks(el: HTMLElement, onDoubleClick: (x: number
 export const STATS_INTERVAL_MS = 250
 /** Height reserved for the toolbar overlay; the view is centred in the space below it. */
 export const TOP_INSET = 70
+/** Background stars in both views: colour, and size in CSS px. */
+export const STARFIELD_COLOR = '#8890b0'
+export const STARFIELD_POINT_SIZE = 1.5
 /** Zoom factor per button press or key press. */
 export const ZOOM_STEP = 1.5
 

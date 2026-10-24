@@ -29,6 +29,7 @@ export default function App() {
   const [speedLog, setSpeedLog] = useState(0)
   const [showTrails, setShowTrails] = useState(true)
   const [showLabels, setShowLabels] = useState(true)
+  const [showStars, setShowStars] = useState(true)
   const [follow, setFollow] = useState<number | null>(null)
   const [stats, setStats] = useState<Stats | null>(null)
   const [view, setView] = useState<'2d' | '3d'>('2d')
@@ -78,6 +79,7 @@ export default function App() {
     yearsPerSecond,
     showTrails,
     showLabels,
+    showStars,
     follow,
     onStats: setStats,
     onSelect: select,
@@ -226,6 +228,9 @@ export default function App() {
           </label>
           <label>
             <input type="checkbox" checked={showLabels} onChange={(e) => setShowLabels(e.target.checked)} /> Labels
+          </label>
+          <label title="Background stars">
+            <input type="checkbox" checked={showStars} onChange={(e) => setShowStars(e.target.checked)} /> Stars
           </label>
           <label>
             Centre on{' '}
