@@ -1,4 +1,5 @@
 import type { Vec3 } from '../physics/nbody'
+import { planetColor, planetOrbitPath, type PlanetConfig, type PlanetHost, type SystemConfig } from '../physics/setup'
 import type { Simulation, Stats } from '../sim/simulation'
 import { EARTH_RADIUS } from '../physics/units'
 
@@ -62,6 +63,48 @@ export interface ViewProps {
   onStats: (stats: Stats) => void
   /** A body was clicked or tapped, or empty space (null). */
   onSelect: (id: number | null) => void
+  /** Orbits edited in the form but not applied yet. */
+  previewOrbits: OrbitPreview[]
+}
+
+/** A planet orbit edited in the form but not applied yet, drawn dashed around its host's current position. */
+export interface OrbitPreview {
+  host: PlanetHost
+  /** AU, relative to the host; from planetOrbitPath. */
+  path: Vec3[]
+  color: string
+}
+
+const ORBIT_FIELDS = ['host', 'distance', 'eccentricity', 'angle', 'inclination', 'node'] as const satisfies (keyof PlanetConfig)[]
+
+/** Previews for the planets whose orbit in the form differs from the applied (running) system. */
+export function orbitPreviews(config: SystemConfig, applied: SystemConfig): OrbitPreview[] {
+  return config.planets.flatMap((p, i) => {
+    const running = applied.planets[i]
+    if (running && ORBIT_FIELDS.every((k) => p[k] === running[k])) return []
+    const path = planetOrbitPath(p)
+    return path.length ? [{ host: p.host, path, color: planetColor(i) }] : []
+  })
+}
+
+/**
+ * Where a preview's host is now in the running simulation: a star (whose body id is its star index) or the
+ * barycentre of all stars. Null if that star is gone, e.g. after a merger.
+ */
+export function hostPosition(sim: Simulation, host: PlanetHost): Vec3 | null {
+  const { pos, mass, info, n } = sim.system
+  if (host !== 'all') {
+    const i = info.findIndex((b) => b.id === host && b.kind === 'star')
+    return i < 0 ? null : [pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]]
+  }
+  const c: Vec3 = [0, 0, 0]
+  let m = 0
+  for (let i = 0; i < n; i++) {
+    if (info[i].kind !== 'star') continue
+    for (const k of [0, 1, 2]) c[k] += mass[i] * pos[3 * i + k]
+    m += mass[i]
+  }
+  return m > 0 ? [c[0] / m, c[1] / m, c[2] / m] : null
 }
 
 /** Where a body was last drawn: centre and radius in CSS px from the view's top-left corner. */

@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { ConfigPanel } from './components/ConfigPanel'
 import { SimulationCanvas } from './components/SimulationCanvas'
-import { SharedCamera } from './components/view'
+import { orbitPreviews, SharedCamera } from './components/view'
 import { PRESETS } from './physics/presets'
 import { validate, type SystemConfig } from './physics/setup'
 import { Simulation, type Stats } from './sim/simulation'
@@ -24,6 +24,8 @@ export default function App() {
   const [applied, setApplied] = useState(config)
   const [sim, setSim] = useState(() => new Simulation(config))
   const [running, setRunning] = useState(true)
+  /** True while the simulation is paused only because the form is being edited. */
+  const [pausedForEdit, setPausedForEdit] = useState(false)
   const [speedLog, setSpeedLog] = useState(0)
   const [showTrails, setShowTrails] = useState(true)
   const [showLabels, setShowLabels] = useState(true)
@@ -58,6 +60,8 @@ export default function App() {
   }
 
   const errors = useMemo(() => validate(config), [config])
+  // Orbit edits are previewed until applied; Apply (or loading, +, −) makes config and applied the same again.
+  const previewOrbits = useMemo(() => orbitPreviews(config, applied), [config, applied])
   const dirty = config !== applied
   const yearsPerSecond = 10 ** speedLog
 
@@ -67,13 +71,52 @@ export default function App() {
     if (id !== null) setFocusBody({ id })
   }
 
-  const viewProps = { sim, camera, running, yearsPerSecond, showTrails, showLabels, follow, onStats: setStats, onSelect: select }
+  const viewProps = {
+    sim,
+    camera,
+    running,
+    yearsPerSecond,
+    showTrails,
+    showLabels,
+    follow,
+    onStats: setStats,
+    onSelect: select,
+    previewOrbits,
+  }
 
   const start = (next: SystemConfig) => {
     setSim(new Simulation(next))
     setApplied(next)
     setFollow(null)
     setStats(null)
+    if (pausedForEdit) {
+      setRunning(true)
+      setPausedForEdit(false)
+    }
+  }
+
+  /** Editing the form pauses the simulation; it runs again once the edits are applied. */
+  const edit = (next: SystemConfig) => {
+    setConfig(next)
+    if (running) {
+      setRunning(false)
+      setPausedForEdit(true)
+    }
+  }
+
+  /** Throws away unapplied edits, and resumes the simulation if they were what paused it. */
+  const discard = () => {
+    setConfig(applied)
+    if (pausedForEdit) {
+      setRunning(true)
+      setPausedForEdit(false)
+    }
+  }
+
+  const toggleRunning = () => {
+    setRunning(!running)
+    // Run or Pause by hand overrides the automatic resume.
+    setPausedForEdit(false)
   }
 
   const apply = () => {
@@ -107,7 +150,7 @@ export default function App() {
             ☰
           </button>
         </header>
-        <ConfigPanel config={config} onChange={setConfig} onApply={applyNow} selected={follow} focus={focusBody} />
+        <ConfigPanel config={config} onChange={edit} onApply={applyNow} selected={follow} focus={focusBody} />
         <div className="apply-bar">
           {errors.length > 0 && (
             <ul className="errors">
@@ -116,9 +159,20 @@ export default function App() {
               ))}
             </ul>
           )}
-          <button type="button" className="primary" disabled={errors.length > 0} onClick={apply}>
-            {dirty ? 'Apply changes and restart' : 'Restart simulation'}
-          </button>
+          <div className="apply-buttons">
+            <button type="button" disabled={!dirty} title="Put the form back to the running system" onClick={discard}>
+              Discard
+            </button>
+            <button
+              type="button"
+              className="primary"
+              disabled={errors.length > 0}
+              title={dirty ? 'Restart the simulation with the edited system' : 'Restart the simulation from the beginning'}
+              onClick={apply}
+            >
+              Apply
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -152,7 +206,7 @@ export default function App() {
               </button>
             ))}
           </div>
-          <button type="button" onClick={() => setRunning(!running)}>
+          <button type="button" title={pausedForEdit ? 'Paused while editing; Apply runs it again' : undefined} onClick={toggleRunning}>
             {running ? 'Pause' : 'Run'}
           </button>
           <label className="speed">

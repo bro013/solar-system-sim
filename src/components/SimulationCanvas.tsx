@@ -3,6 +3,7 @@ import type { Simulation } from '../sim/simulation'
 import {
   displayRadius,
   formatAU,
+  hostPosition,
   listenForClicks,
   listenForHover,
   listenForZoomKeys,
@@ -105,6 +106,23 @@ export function SimulationCanvas(props: ViewProps) {
           ctx.stroke()
         }
         ctx.globalAlpha = 1
+      }
+
+      if (p.previewOrbits.length) {
+        ctx.lineWidth = 1.5
+        ctx.setLineDash([6, 5])
+        for (const orbit of p.previewOrbits) {
+          const host = hostPosition(sim, orbit.host)
+          if (!host) continue
+          ctx.strokeStyle = orbit.color
+          ctx.beginPath()
+          orbit.path.forEach(([x, y], k) => {
+            if (k === 0) ctx.moveTo(sx(host[0] + x), sy(host[1] + y))
+            else ctx.lineTo(sx(host[0] + x), sy(host[1] + y))
+          })
+          ctx.stroke()
+        }
+        ctx.setLineDash([])
       }
 
       // Hit-tested against the last frame's positions, so a body moving under a still mouse lights up too.

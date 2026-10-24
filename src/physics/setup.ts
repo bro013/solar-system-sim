@@ -1,4 +1,4 @@
-import { NBody, type BodyInit } from './nbody'
+import { NBody, type BodyInit, type Vec3 } from './nbody'
 import { G, earthMasses, earthRadii, solarRadii } from './units'
 
 /** A star as the user enters it. */
@@ -96,26 +96,52 @@ interface Orbit {
 const rad = (deg: number) => (deg * Math.PI) / 180
 
 /**
+ * Returns a function that rotates in-plane vectors (px, py) of `orbit` into the reference frame, by the classical
+ * sequence Rz(node) · Rx(inclination) · Rz(argument of periapsis), where argument of periapsis = angle − node.
+ * The in-plane x axis points to periapsis.
+ */
+function orbitPlane(orbit: Orbit) {
+  const node = rad(orbit.node), inc = rad(orbit.inclination), w = rad(orbit.angle - orbit.node)
+  return (px: number, py: number): Vec3 => {
+    const u = px * Math.cos(w) - py * Math.sin(w)
+    const t = px * Math.sin(w) + py * Math.cos(w)
+    return [u * Math.cos(node) - t * Math.cos(inc) * Math.sin(node), u * Math.sin(node) + t * Math.cos(inc) * Math.cos(node), t * Math.sin(inc)]
+  }
+}
+
+/**
  * Places a body of mass m at periapsis of a Keplerian orbit around `host`, moving prograde (counter-clockwise
- * seen from +z when the inclination is below 90°). The orbit plane is rotated by the classical sequence
- * Rz(node) · Rx(inclination) · Rz(argument of periapsis), where argument of periapsis = angle − node.
+ * seen from +z when the inclination is below 90°).
  */
 function orbitAround(host: Group, m: number, orbit: Orbit) {
   const r = orbit.a * (1 - orbit.e)
   // Vis-viva at periapsis for the two-body problem.
   const v = Math.sqrt((G * (host.mass + m) * (1 + orbit.e)) / r)
-  const node = rad(orbit.node), inc = rad(orbit.inclination), w = rad(orbit.angle - orbit.node)
-
-  /** Rotates the in-plane vector (px, py) into the reference frame. */
-  const rotate = (px: number, py: number) => {
-    const u = px * Math.cos(w) - py * Math.sin(w)
-    const t = px * Math.sin(w) + py * Math.cos(w)
-    return [u * Math.cos(node) - t * Math.cos(inc) * Math.sin(node), u * Math.sin(node) + t * Math.cos(inc) * Math.cos(node), t * Math.sin(inc)]
-  }
+  const rotate = orbitPlane(orbit)
   const [x, y, z] = rotate(r, 0)
   const [vx, vy, vz] = rotate(0, v)
   return { x: host.x + x, y: host.y + y, z: host.z + z, vx: host.vx + vx, vy: host.vy + vy, vz: host.vz + vz }
 }
+
+/**
+ * Points around a planet's Keplerian orbit in AU relative to its host, from periapsis (where the planet starts)
+ * round to periapsis again, for previewing an orbit before it is applied. Empty if the orbit is not valid.
+ */
+export function planetOrbitPath(p: PlanetConfig, points = 180): Vec3[] {
+  const { distance: a, eccentricity: e } = p
+  if (!(a > 0 && e >= 0 && e < 1)) return []
+  const rotate = orbitPlane({ a, e, angle: p.angle, inclination: p.inclination, node: p.node })
+  const path: Vec3[] = []
+  for (let k = 0; k <= points; k++) {
+    const nu = (2 * Math.PI * k) / points // true anomaly
+    const r = (a * (1 - e * e)) / (1 + e * Math.cos(nu))
+    path.push(rotate(r * Math.cos(nu), r * Math.sin(nu)))
+  }
+  return path
+}
+
+/** The colour planet `index` is drawn in. */
+export const planetColor = (index: number) => PLANET_COLORS[index % PLANET_COLORS.length]
 
 export function validate(config: SystemConfig): string[] {
   const errors: string[] = []
@@ -159,7 +185,7 @@ export function buildBodies(config: SystemConfig): BodyInit[] {
     return {
       name: p.name,
       kind: 'planet',
-      color: PLANET_COLORS[i % PLANET_COLORS.length],
+      color: planetColor(i),
       mass: m,
       radius: earthRadii(p.radius),
       ...orbitAround(host, m, { a: p.distance, e: p.eccentricity, angle: p.angle, inclination: p.inclination, node: p.node }),

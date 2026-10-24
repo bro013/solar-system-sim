@@ -3,10 +3,12 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js'
 import type { Vec3 } from '../physics/nbody'
+import type { PlanetHost } from '../physics/setup'
 import type { Simulation } from '../sim/simulation'
 import {
   displayRadius,
   formatAU,
+  hostPosition,
   listenForClicks,
   listenForHover,
   listenForZoomKeys,
@@ -16,6 +18,7 @@ import {
   TOP_INSET,
   ZOOM_STEP,
   type CameraView,
+  type OrbitPreview,
   type ScreenBody,
   type ViewProps,
 } from './view'
@@ -125,6 +128,39 @@ export default function SimulationView3D(props: ViewProps) {
     const glowMap = glowTexture()
     const bodies = new Map<number, BodyObject>()
     let builtFor: Simulation | null = null
+
+    /** Dashed lines for previewed orbits: rebuilt when the previews change, moved with their hosts every frame. */
+    let previewsFor: OrbitPreview[] | null = null
+    let previewLines: { line: THREE.Line; host: PlanetHost }[] = []
+    const disposePreviews = () => {
+      for (const { line } of previewLines) {
+        world.remove(line)
+        line.geometry.dispose()
+        ;(line.material as THREE.Material).dispose()
+      }
+      previewLines = []
+    }
+    const buildPreviews = (previews: OrbitPreview[]) => {
+      disposePreviews()
+      const point = new THREE.Vector3()
+      for (const orbit of previews) {
+        const positions = new Float32Array(orbit.path.length * 3)
+        orbit.path.forEach(([x, y, z], k) => toScene(point, x, y, z).toArray(positions, 3 * k))
+        const geometry = new THREE.BufferGeometry()
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+        const material = new THREE.LineDashedMaterial({ color: orbit.color, transparent: true, opacity: 0.9 })
+        const line = new THREE.Line(geometry, material)
+        line.computeLineDistances()
+        // Dashes sized to the orbit's length, so they look the same for orbits of any size.
+        const distances = geometry.getAttribute('lineDistance')
+        material.dashSize = distances.getX(distances.count - 1) / 120
+        material.gapSize = material.dashSize * 0.8
+        line.frustumCulled = false
+        world.add(line)
+        previewLines.push({ line, host: orbit.host })
+      }
+      previewsFor = previews
+    }
 
     const disposeBody = (o: BodyObject) => {
       world.remove(o.mesh, o.trail)
@@ -315,6 +351,13 @@ export default function SimulationView3D(props: ViewProps) {
         }
       }
 
+      if (p.previewOrbits !== previewsFor) buildPreviews(p.previewOrbits)
+      for (const { line, host } of previewLines) {
+        const at = hostPosition(sim, host)
+        line.visible = at !== null
+        if (at) toScene(line.position, at[0] - origin[0], at[1] - origin[1], at[2] - origin[2])
+      }
+
       const refId = fi >= 0 ? info[fi].id : null
       for (const [id, o] of bodies) {
         o.trail.visible = p.showTrails
@@ -358,6 +401,7 @@ export default function SimulationView3D(props: ViewProps) {
       controls.dispose()
       for (const o of bodies.values()) disposeBody(o)
       grid?.dispose()
+      disposePreviews()
       sphere.dispose()
       glowMap.dispose()
       stars.geometry.dispose()

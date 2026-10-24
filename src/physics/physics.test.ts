@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { NBody, type Vec3 } from './nbody'
 import { PRESETS } from './presets'
-import { buildBodies, createSystem, suggestedTimeStep, type PlanetConfig, type SystemConfig } from './setup'
+import { buildBodies, createSystem, planetOrbitPath, suggestedTimeStep, type PlanetConfig, type SystemConfig } from './setup'
 import { EARTH_MASS } from './units'
 
 const earth: PlanetConfig = { name: 'Earth', mass: 1, radius: 1, host: 0, distance: 1, eccentricity: 0, angle: 0, inclination: 0, node: 0 }
@@ -122,5 +122,30 @@ describe('collisions', () => {
     expect(sys.mass[0]).toBeCloseTo(3e-6, 15)
     const p1 = sys.momentum()
     for (const k of [0, 1, 2]) expect(p1[k]).toBeCloseTo(p0[k], 12)
+  })
+})
+
+describe('planetOrbitPath', () => {
+  const tilted = { distance: 2, eccentricity: 0.3, angle: 40, inclination: 25, node: 70 }
+
+  it('starts where the simulation places the planet, relative to its host', () => {
+    const [sun, planet] = buildBodies(withPlanet(tilted))
+    const [start] = planetOrbitPath({ ...earth, ...tilted })
+    expect(start[0]).toBeCloseTo(planet.x - sun.x, 12)
+    expect(start[1]).toBeCloseTo(planet.y - sun.y, 12)
+    expect(start[2]).toBeCloseTo(planet.z - sun.z, 12)
+  })
+
+  it('is a closed ellipse between periapsis and apoapsis', () => {
+    const path = planetOrbitPath({ ...earth, ...tilted }, 360)
+    const r = path.map((p) => Math.hypot(...p))
+    expect(Math.min(...r)).toBeCloseTo(2 * (1 - 0.3), 9)
+    expect(Math.max(...r)).toBeCloseTo(2 * (1 + 0.3), 9)
+    path[0].forEach((c, k) => expect(path.at(-1)![k]).toBeCloseTo(c, 12))
+  })
+
+  it('is empty for orbits that cannot be drawn', () => {
+    expect(planetOrbitPath({ ...earth, eccentricity: 1 })).toEqual([])
+    expect(planetOrbitPath({ ...earth, distance: 0 })).toEqual([])
   })
 })

@@ -219,8 +219,18 @@ button.small {
   font-size: 0.8rem;
 }
 
+.apply-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+/* Discard and Apply share the row equally. */
+.apply-buttons button {
+  flex: 1;
+  padding: 8px;
+}
+
 button.primary {
-  width: 100%;
   background: var(--accent);
   border-color: var(--accent);
   color: #08101f;

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { pickBody, SharedCamera } from './view'
+import { PRESETS } from '../physics/presets'
+import type { PlanetConfig, SystemConfig } from '../physics/setup'
+import { orbitPreviews, pickBody, SharedCamera } from './view'
 
 describe('SharedCamera', () => {
   it('recentres on the followed body, keeping the zoom and 3D direction', () => {
@@ -49,5 +51,32 @@ describe('pickBody', () => {
   it('returns null for empty space', () => {
     expect(pickBody(bodies, 300, 300)).toBeNull()
     expect(pickBody([], 0, 0)).toBeNull()
+  })
+})
+
+describe('orbitPreviews', () => {
+  const applied = PRESETS[0].config
+  const editPlanet = (i: number, patch: Partial<PlanetConfig>): SystemConfig => ({
+    ...applied,
+    planets: applied.planets.map((p, j) => (j === i ? { ...p, ...patch } : p)),
+  })
+
+  it('is empty while the form matches the running system', () => {
+    expect(orbitPreviews(applied, applied)).toEqual([])
+  })
+
+  it('previews only planets whose orbit was edited', () => {
+    const previews = orbitPreviews(editPlanet(2, { distance: 1.4 }), applied)
+    expect(previews).toHaveLength(1)
+    expect(previews[0].host).toBe(applied.planets[2].host)
+    expect(Math.hypot(...previews[0].path[0])).toBeCloseTo(1.4 * (1 - applied.planets[2].eccentricity), 9)
+  })
+
+  it('ignores edits that do not change the orbit', () => {
+    expect(orbitPreviews(editPlanet(0, { name: 'Renamed', mass: 5 }), applied)).toEqual([])
+  })
+
+  it('skips orbits that are not valid yet', () => {
+    expect(orbitPreviews(editPlanet(0, { eccentricity: 1.5 }), applied)).toEqual([])
   })
 })
