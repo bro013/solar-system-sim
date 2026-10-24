@@ -203,6 +203,12 @@ button.primary {
   min-height: 0;
 }
 
+/* Overrides the fixed height the viewport has on narrow screens. */
+.viewport:fullscreen {
+  height: 100%;
+  background: var(--bg);
+}
+
 .sim-canvas {
   display: block;
   width: 100%;

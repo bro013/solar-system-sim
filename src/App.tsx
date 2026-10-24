@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { ConfigPanel } from './components/ConfigPanel'
 import { SimulationCanvas } from './components/SimulationCanvas'
 import { PRESETS } from './physics/presets'
@@ -29,6 +29,20 @@ export default function App() {
   const [follow, setFollow] = useState<number | null>(null)
   const [stats, setStats] = useState<Stats | null>(null)
   const [view, setView] = useState<'2d' | '3d'>('2d')
+  const viewportRef = useRef<HTMLElement>(null)
+  const [fullscreen, setFullscreen] = useState(false)
+
+  // Follow the browser's state too, since Esc leaves fullscreen without going through the button.
+  useEffect(() => {
+    const onChange = () => setFullscreen(document.fullscreenElement === viewportRef.current)
+    document.addEventListener('fullscreenchange', onChange)
+    return () => document.removeEventListener('fullscreenchange', onChange)
+  }, [])
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) void document.exitFullscreen()
+    else void viewportRef.current?.requestFullscreen()
+  }
 
   const errors = useMemo(() => validate(config), [config])
   const dirty = config !== applied
@@ -75,7 +89,7 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="viewport">
+      <main className="viewport" ref={viewportRef}>
         {view === '2d' ? (
           <SimulationCanvas {...viewProps} />
         ) : (
@@ -127,6 +141,12 @@ export default function App() {
           <button type="button" onClick={() => sim.clearTrails()}>
             Clear trails
           </button>
+          {/* Not offered where the browser can't make an element fullscreen (e.g. Safari on iPhone). */}
+          {document.fullscreenEnabled && (
+            <button type="button" aria-pressed={fullscreen} title="Fill the screen with the view (Esc to leave)" onClick={toggleFullscreen}>
+              {fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            </button>
+          )}
         </div>
 
         {stats && (
