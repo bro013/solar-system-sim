@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { ConfigPanel } from './components/ConfigPanel'
+import { InfoDialog } from './components/InfoDialog'
 import { SimulationCanvas } from './components/SimulationCanvas'
 import { orbitPreviews, SharedCamera } from './components/view'
 import { PRESETS } from './physics/presets'
@@ -36,6 +37,7 @@ export default function App() {
   const viewportRef = useRef<HTMLElement>(null)
   const [fullscreen, setFullscreen] = useState(false)
   const [panelOpen, setPanelOpen] = useState(true)
+  const [infoOpen, setInfoOpen] = useState(false)
   const [camera] = useState(() => new SharedCamera())
   /** The body whose card the side panel should bring into view; a new object each click, so a repeat click works. */
   const [focusBody, setFocusBody] = useState<{ id: number } | null>(null)
@@ -246,6 +248,9 @@ export default function App() {
           <button type="button" onClick={() => sim.clearTrails()}>
             Clear trails
           </button>
+          <button type="button" title="What the settings mean" aria-haspopup="dialog" onClick={() => setInfoOpen(true)}>
+            Info
+          </button>
           {/* Not offered where the browser can't make an element fullscreen (e.g. Safari on iPhone). */}
           {document.fullscreenEnabled && (
             <button type="button" aria-pressed={fullscreen} title="Fill the screen with the view (Esc to leave)" onClick={toggleFullscreen}>
@@ -271,6 +276,8 @@ export default function App() {
           </div>
         )}
       </main>
+
+      <InfoDialog open={infoOpen} onClose={() => setInfoOpen(false)} />
     </div>
   )
 }
