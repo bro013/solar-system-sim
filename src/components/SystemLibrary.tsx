@@ -28,6 +28,15 @@ export function SystemLibrary({ config, onLoad }: Props) {
   /** The name being typed in the save form, or null while the form is closed. */
   const [saveName, setSaveName] = useState<string | null>(null)
   const [message, setMessage] = useState<{ error: boolean; text: string } | null>(null)
+  /**
+   * The system last loaded or saved, shown in the Load system list: its option value, its name, and the config
+   * it gave the form, to tell whether the form has been changed since. App starts on the first preset.
+   */
+  const [shown, setShown] = useState<{ value: string; name: string; config: SystemConfig }>(() => ({
+    value: 'preset:0',
+    name: PRESETS[0].name,
+    config,
+  }))
   const fileInput = useRef<HTMLInputElement>(null)
 
   // Pick up systems saved or deleted in other tabs.
@@ -39,8 +48,9 @@ export function SystemLibrary({ config, onLoad }: Props) {
     return () => window.removeEventListener('storage', onStorage)
   }, [store])
 
-  const load = (config: SystemConfig, activeName: string | null, text: string | null) => {
+  const load = (config: SystemConfig, value: string, name: string, activeName: string | null, text: string | null) => {
     onLoad(config)
+    setShown({ value, name, config })
     setActive(activeName)
     setSaveName(null)
     setMessage(text ? { error: false, text } : null)
@@ -61,32 +71,44 @@ export function SystemLibrary({ config, onLoad }: Props) {
   const submitSave = () => {
     if (!trimmed) return
     run(() => store.save(trimmed, config), `Saved “${trimmed}” in this browser.`)
+    setShown({ value: `saved:${trimmed}`, name: trimmed, config })
     setActive(trimmed)
     setSaveName(null)
   }
 
   const importFile = async (file: File) => {
     try {
-      load(parseProfile(await file.text()), null, `Loaded ${file.name}.`)
+      load(parseProfile(await file.text()), 'file', file.name, null, `Loaded ${file.name}.`)
     } catch (e) {
       setMessage({ error: true, text: e instanceof ProfileError ? e.message : `Could not read ${file.name}.` })
     }
   }
+
+  // The list selects the shown system's own option while the form still holds it unchanged. Otherwise it shows a
+  // placeholder with its name, so choosing the original from the list reloads it (a select ignores re-choosing
+  // its current value). Imported files, and saved systems deleted since, have no option of their own.
+  const unchanged = shown.config === config
+  const hasOption = shown.value.startsWith('preset:') || saved.some((s) => `saved:${s.name}` === shown.value)
+  const selectValue = unchanged && hasOption ? shown.value : 'current'
 
   return (
     <>
       <label className="field">
         <span className="field-label">Load system</span>
         <select
-          value=""
+          value={selectValue}
           onChange={(e) => {
             const [kind, key] = e.target.value.split(/:(.*)/s)
-            if (kind === 'preset') load(structuredClone(PRESETS[+key].config), null, null)
+            if (kind === 'preset') load(structuredClone(PRESETS[+key].config), e.target.value, PRESETS[+key].name, null, null)
             const s = kind === 'saved' ? saved.find((x) => x.name === key) : undefined
-            if (s) load(structuredClone(s.config), s.name, `Loaded “${s.name}”.`)
+            if (s) load(structuredClone(s.config), e.target.value, s.name, s.name, `Loaded “${s.name}”.`)
           }}
         >
-          <option value="">Choose…</option>
+          {selectValue === 'current' && (
+            <option value="current" disabled>
+              {unchanged ? shown.name : `${shown.name} (modified)`}
+            </option>
+          )}
           <optgroup label="Presets">
             {PRESETS.map((p, i) => (
               <option key={p.name} value={`preset:${i}`}>
