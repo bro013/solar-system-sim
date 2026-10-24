@@ -21,7 +21,7 @@ Three layers, each depending only on the ones below it:
 
 1. **`src/physics/`: pure, no React.** `SystemConfig` (in `setup.ts`) is the user-facing description of a system, in form units (M☉, M⊕, R☉, R⊕, AU, degrees). `setup.ts` validates it and turns it into `BodyInit[]` in internal units (AU, M☉, years, G = 4π²; see `units.ts`), then into an `NBody` (`nbody.ts`), the leapfrog integrator. `profile.ts` is the JSON import/export format for a `SystemConfig`; `presets.ts` holds the built-in systems.
 2. **`src/sim/`: runtime state outside React.** `Simulation` owns an `NBody`, steps it from wall-clock time with a fixed `dt` (an accumulator, capped at `MAX_STEPS_PER_FRAME`, which sets `throttled`), records trails in a ring buffer, and reports `Stats`. `savedSystems.ts` stores named systems in localStorage, in the profile format.
-3. **`src/components/` + `App.tsx`: React UI.** `App` holds the edited `config` and a separate `applied` config. Pressing Apply builds a new `Simulation`; loading a system (preset, saved or imported, via `ConfigPanel`'s `onLoad`) does so straight away. The 2D (`SimulationCanvas`) and 3D (`SimulationView3D`, three.js, lazy-loaded) views share `ViewProps` from `view.ts`.
+3. **`src/components/` + `App.tsx`: React UI.** `App` holds the edited `config` and a separate `applied` config. Pressing Apply builds a new `Simulation`; loading a system (preset, saved or imported) or adding or removing a body with the +/− buttons does so straight away, via `ConfigPanel`'s `onApply`. The 2D (`SimulationCanvas`) and 3D (`SimulationView3D`, three.js, lazy-loaded) views share `ViewProps` from `view.ts`.
 
 Things that span several files:
 

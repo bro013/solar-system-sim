@@ -68,8 +68,8 @@ export default function App() {
     if (!errors.length) start(config)
   }
 
-  /** A system loaded from a preset, saved system or file runs straight away; form edits wait for Apply. */
-  const load = (next: SystemConfig) => {
+  /** Loading a system or adding or removing a body runs straight away; other form edits wait for Apply. */
+  const applyNow = (next: SystemConfig) => {
     setConfig(next)
     if (!validate(next).length) start(next)
   }
@@ -81,7 +81,7 @@ export default function App() {
           <h1>Solar System Simulator</h1>
           <p className="hint">Newtonian N-body · masses in M☉ / M⊕ · radii in R☉ / R⊕ · distances in AU</p>
         </header>
-        <ConfigPanel config={config} onChange={setConfig} onLoad={load} />
+        <ConfigPanel config={config} onChange={setConfig} onApply={applyNow} />
         <div className="apply-bar">
           {errors.length > 0 && (
             <ul className="errors">

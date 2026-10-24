@@ -6,19 +6,13 @@ import { SystemLibrary } from './SystemLibrary'
 
 interface Props {
   config: SystemConfig
-  /** An edit to the system in the form. */
+  /** An edit to the system in the form, run when Apply is pressed. */
   onChange: (config: SystemConfig) => void
-  /** A different system was loaded (preset, saved or imported). */
-  onLoad: (config: SystemConfig) => void
+  /** A change to run straight away: loading a system, or adding or removing a body with + or −. */
+  onApply: (config: SystemConfig) => void
 }
 
-function resize<T>(list: T[], count: number, make: (i: number, prev?: T) => T): T[] {
-  const next = list.slice(0, count)
-  while (next.length < count) next.push(make(next.length, next[next.length - 1]))
-  return next
-}
-
-export function ConfigPanel({ config, onChange, onLoad }: Props) {
+export function ConfigPanel({ config, onChange, onApply }: Props) {
   const { stars, planets } = config
 
   const setStar = (i: number, patch: Partial<StarConfig>) =>
@@ -26,23 +20,39 @@ export function ConfigPanel({ config, onChange, onLoad }: Props) {
   const setPlanet = (i: number, patch: Partial<PlanetConfig>) =>
     onChange({ ...config, planets: planets.map((p, j) => (j === i ? { ...p, ...patch } : p)) })
 
-  const setStarCount = (count: number) => {
-    const n = Math.max(1, Math.min(MAX_STARS, Math.round(count)))
-    // Planets orbiting a removed star move to the first star.
-    const fixHost = (p: PlanetConfig) => (p.host !== 'all' && p.host >= n ? { ...p, host: 0 } : p)
-    onChange({ stars: resize(stars, n, defaultStar), planets: planets.map(fixHost) })
+  const addStar = () => onApply({ ...config, stars: [...stars, defaultStar(stars.length, stars.at(-1))] })
+  const addPlanet = () => onApply({ ...config, planets: [...planets, defaultPlanet(planets.length, planets.at(-1))] })
+
+  const removeStar = (i: number) => {
+    // Hosts after the removed star shift down by one; its own planets move to the first star.
+    const fixHost = (p: PlanetConfig): PlanetConfig =>
+      p.host === 'all' ? p : { ...p, host: p.host === i ? 0 : p.host > i ? p.host - 1 : p.host }
+    onApply({ stars: stars.filter((_, j) => j !== i), planets: planets.map(fixHost) })
   }
-  const setPlanetCount = (count: number) =>
-    onChange({ ...config, planets: resize(planets, Math.max(0, Math.min(MAX_PLANETS, Math.round(count))), defaultPlanet) })
+  const removePlanet = (i: number) => onApply({ ...config, planets: planets.filter((_, j) => j !== i) })
 
   return (
     <div className="config">
-      {/* Pinned, so loading, saving and the counts stay reachable while the list of bodies scrolls. */}
+      {/* Pinned, so loading, saving and adding bodies stay reachable while the list of bodies scrolls. */}
       <section className="config-top">
-        <SystemLibrary config={config} onLoad={onLoad} />
+        <SystemLibrary config={config} onLoad={onApply} />
         <div className="grid2">
-          <NumberField label="Stars" value={stars.length} min={1} max={MAX_STARS} step={1} onChange={setStarCount} />
-          <NumberField label="Planets" value={planets.length} min={0} max={MAX_PLANETS} step={1} onChange={setPlanetCount} />
+          <button
+            type="button"
+            disabled={stars.length >= MAX_STARS}
+            title={stars.length >= MAX_STARS ? `At most ${MAX_STARS} stars` : 'Add a star'}
+            onClick={addStar}
+          >
+            Star +
+          </button>
+          <button
+            type="button"
+            disabled={planets.length >= MAX_PLANETS}
+            title={planets.length >= MAX_PLANETS ? `At most ${MAX_PLANETS} planets` : 'Add a planet'}
+            onClick={addPlanet}
+          >
+            Planet +
+          </button>
         </div>
       </section>
 
@@ -81,11 +91,23 @@ export function ConfigPanel({ config, onChange, onLoad }: Props) {
             )}
           </div>
           {i > 0 && <p className="hint">Circular orbit around the barycentre of {i === 1 ? stars[0].name : `stars 1–${i}`}.</p>}
+          <div className="card-actions">
+            <button
+              type="button"
+              className="small"
+              disabled={stars.length === 1}
+              title={stars.length === 1 ? 'A system needs at least one star' : `Remove ${s.name}`}
+              aria-label={`Remove ${s.name}`}
+              onClick={() => removeStar(i)}
+            >
+              −
+            </button>
+          </div>
         </fieldset>
       ))}
 
       <h2>Planets</h2>
-      {planets.length === 0 && <p className="hint">No planets. Increase the count above to add some.</p>}
+      {planets.length === 0 && <p className="hint">No planets. Press Planet + to add one.</p>}
       {planets.map((p, i) => (
         <fieldset key={i} className="body-card">
           <legend>
@@ -113,6 +135,11 @@ export function ConfigPanel({ config, onChange, onLoad }: Props) {
             <NumberField label="Angle" unit="°" value={p.angle} onChange={(angle) => setPlanet(i, { angle })} />
             <NumberField label="Inclination" unit="°" value={p.inclination} min={0} max={180} onChange={(inclination) => setPlanet(i, { inclination })} />
             <NumberField label="Node" unit="°" value={p.node} onChange={(node) => setPlanet(i, { node })} />
+          </div>
+          <div className="card-actions">
+            <button type="button" className="small" title={`Remove ${p.name}`} aria-label={`Remove ${p.name}`} onClick={() => removePlanet(i)}>
+              −
+            </button>
           </div>
         </fieldset>
       ))}
