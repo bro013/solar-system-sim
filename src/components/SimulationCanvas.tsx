@@ -4,7 +4,7 @@ import {
   displayRadius,
   formatAU,
   hostPosition,
-  listenForClicks,
+  listenForDoubleClicks,
   listenForHover,
   listenForZoomKeys,
   niceLength,
@@ -24,7 +24,7 @@ const MAX_SCALE = 1e8
 export function SimulationCanvas(props: ViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const propsRef = useRef(props)
-  /** Bodies drawn in the last frame, for picking one with a click or hover. */
+  /** Bodies drawn in the last frame, for picking one with a double-click or hover. */
   const onScreen = useRef<ScreenBody[]>([])
   /** Mouse position over the canvas while hovering, or null. */
   const hoverPoint = useRef<{ x: number; y: number } | null>(null)
@@ -241,17 +241,13 @@ export function SimulationCanvas(props: ViewProps) {
       e.preventDefault()
       zoomAt(...fromCentre(e.clientX, e.clientY), Math.exp(-e.deltaY * 0.0015))
     }
-    const onDoubleClick = (e: MouseEvent) => {
-      zoomAt(...fromCentre(e.clientX, e.clientY), e.shiftKey ? 1 / ZOOM_STEP : ZOOM_STEP)
-    }
     canvas.addEventListener('pointerdown', onDown)
     canvas.addEventListener('pointermove', onMove)
     canvas.addEventListener('pointerup', onUp)
     canvas.addEventListener('pointercancel', onUp)
     canvas.addEventListener('wheel', onWheel, { passive: false })
-    canvas.addEventListener('dblclick', onDoubleClick)
     const stopKeys = listenForZoomKeys((f) => zoomAt(0, 0, f), () => propsRef.current.camera.reset())
-    const stopClicks = listenForClicks(canvas, (x, y) => {
+    const stopClicks = listenForDoubleClicks(canvas, (x, y) => {
       const id = pickBody(onScreen.current, x, y)
       propsRef.current.onSelect(id)
     })
@@ -264,7 +260,6 @@ export function SimulationCanvas(props: ViewProps) {
       canvas.removeEventListener('pointerup', onUp)
       canvas.removeEventListener('pointercancel', onUp)
       canvas.removeEventListener('wheel', onWheel)
-      canvas.removeEventListener('dblclick', onDoubleClick)
       stopKeys()
     }
   }, [])

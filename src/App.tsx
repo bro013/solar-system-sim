@@ -65,7 +65,7 @@ export default function App() {
   const dirty = config !== applied
   const yearsPerSecond = 10 ** speedLog
 
-  /** Following a body (by clicking it or from Centre on) brings its card in the side panel into focus; null is the barycentre. */
+  /** Following a body (by double-clicking it or from Centre on) brings its card in the side panel into focus; null is the barycentre. */
   const select = (id: number | null) => {
     setFollow(id)
     if (id !== null) setFocusBody({ id })

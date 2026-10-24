@@ -9,7 +9,7 @@ import {
   displayRadius,
   formatAU,
   hostPosition,
-  listenForClicks,
+  listenForDoubleClicks,
   listenForHover,
   listenForZoomKeys,
   niceLength,
@@ -258,9 +258,9 @@ export default function SimulationView3D(props: ViewProps) {
     }
 
     const stopKeys = listenForZoomKeys((f) => zoomBy(controls, f), () => propsRef.current.camera.reset())
-    /** Bodies drawn in the last frame, for picking one with a click or hover. */
+    /** Bodies drawn in the last frame, for picking one with a double-click or hover. */
     let onScreen: ScreenBody[] = []
-    const stopClicks = listenForClicks(renderer.domElement, (x, y) => {
+    const stopClicks = listenForDoubleClicks(renderer.domElement, (x, y) => {
       const id = pickBody(onScreen, x, y)
       propsRef.current.onSelect(id)
     })
@@ -431,7 +431,7 @@ export default function SimulationView3D(props: ViewProps) {
         </button>
       </div>
       <div ref={gridLabelRef} className="grid-label" />
-      <div className="hint-3d">Drag to rotate · right-drag or Shift+drag to pan · scroll to zoom</div>
+      <div className="hint-3d">Drag to rotate · right-drag or Shift+drag to pan · scroll to zoom · double-click to centre</div>
     </div>
   )
 }

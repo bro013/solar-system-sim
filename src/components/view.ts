@@ -61,7 +61,7 @@ export interface ViewProps {
   /** Body id to keep centred, or null for the system barycentre. */
   follow: number | null
   onStats: (stats: Stats) => void
-  /** A body was clicked or tapped, or empty space (null). */
+  /** A body was double-clicked or double-tapped, or empty space (null). */
   onSelect: (id: number | null) => void
   /** Orbits edited in the form but not applied yet. */
   previewOrbits: OrbitPreview[]
@@ -154,14 +154,22 @@ export function listenForHover(el: HTMLElement, onHover: (point: { x: number; y:
   }
 }
 
+/** Two clicks at most this far apart in time (ms) and space (px) make a double-click. */
+const DOUBLE_CLICK_MS = 400
+const DOUBLE_CLICK_DISTANCE = 10
+
 /**
- * Calls `onClick` with coordinates relative to `el` for primary presses that end where they started, so
- * drags, pans and pinches don't count. Returns a cleanup function.
+ * Calls `onDoubleClick` with coordinates relative to `el` when two clicks follow each other closely. Only
+ * primary presses that end where they started count as clicks, so drags, pans and pinches don't. Done here
+ * rather than with the `dblclick` event, which not every touch browser fires for a double tap. Returns a
+ * cleanup function.
  */
-export function listenForClicks(el: HTMLElement, onClick: (x: number, y: number) => void) {
+export function listenForDoubleClicks(el: HTMLElement, onDoubleClick: (x: number, y: number) => void) {
   const starts = new Map<number, { x: number; y: number }>()
   /** Set once a second pointer goes down, until all are up: a pinch is never a click. */
   let multiTouch = false
+  /** The last single click, waiting for a second one. */
+  let previous: { x: number; y: number; time: number } | null = null
   const onDown = (e: PointerEvent) => {
     starts.set(e.pointerId, { x: e.clientX, y: e.clientY })
     if (starts.size > 1) multiTouch = true
@@ -171,10 +179,22 @@ export function listenForClicks(el: HTMLElement, onClick: (x: number, y: number)
     starts.delete(e.pointerId)
     const wasMultiTouch = multiTouch
     if (starts.size === 0) multiTouch = false
-    if (e.type !== 'pointerup' || !start || wasMultiTouch || e.button !== 0) return
-    if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > CLICK_TOLERANCE) return
+    const isClick =
+      e.type === 'pointerup' && start && !wasMultiTouch && e.button === 0 && Math.hypot(e.clientX - start.x, e.clientY - start.y) <= CLICK_TOLERANCE
+    if (!isClick) {
+      previous = null
+      return
+    }
+    const click = { x: e.clientX, y: e.clientY, time: e.timeStamp }
+    const isDouble =
+      previous && click.time - previous.time <= DOUBLE_CLICK_MS && Math.hypot(click.x - previous.x, click.y - previous.y) <= DOUBLE_CLICK_DISTANCE
+    if (!isDouble) {
+      previous = click
+      return
+    }
+    previous = null
     const rect = el.getBoundingClientRect()
-    onClick(e.clientX - rect.left, e.clientY - rect.top)
+    onDoubleClick(click.x - rect.left, click.y - rect.top)
   }
   el.addEventListener('pointerdown', onDown)
   el.addEventListener('pointerup', onEnd)
@@ -189,7 +209,7 @@ export function listenForClicks(el: HTMLElement, onClick: (x: number, y: number)
 export const STATS_INTERVAL_MS = 250
 /** Height reserved for the toolbar overlay; the view is centred in the space below it. */
 export const TOP_INSET = 70
-/** Zoom factor per button press, key press or double-click. */
+/** Zoom factor per button press or key press. */
 export const ZOOM_STEP = 1.5
 
 /**
