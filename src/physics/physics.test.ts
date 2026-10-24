@@ -162,3 +162,35 @@ describe('planetOrbitCentre', () => {
     planetOrbitCentre({ ...earth, distance: 3 }).forEach((c) => expect(c).toBeCloseTo(0, 12))
   })
 })
+
+describe('Lagrange points preset', () => {
+  const preset = PRESETS.find((p) => p.name.startsWith('Lagrange'))!.config
+
+  /** Angle of each body ahead of Jupiter (body 1) as seen from the Sun (body 0), in degrees, after `orbits` orbits. */
+  function anglesAfter(orbits: number) {
+    const sys = createSystem(preset)
+    run(sys, orbits * 11.86, suggestedTimeStep(preset))
+    const angle = (i: number) => Math.atan2(sys.pos[3 * i + 1] - sys.pos[1], sys.pos[3 * i] - sys.pos[0])
+    return Object.fromEntries(
+      sys.info.slice(2).map((b, k) => [b.name, ((((angle(k + 2) - angle(1)) * 180) / Math.PI + 540) % 360) - 180]),
+    )
+  }
+
+  it('keeps bodies at L4 and L5 60° ahead of and behind Jupiter', () => {
+    const a = anglesAfter(5)
+    expect(a['L4']).toBeCloseTo(60, 0)
+    expect(a['L5']).toBeCloseTo(-60, 0)
+  })
+
+  it('keeps the nearby Trojans librating around L4 and L5', () => {
+    const a = anglesAfter(5)
+    expect(Math.abs(a['Trojan near L4'] - 60)).toBeLessThan(20)
+    expect(Math.abs(a['Trojan near L5'] + 60)).toBeLessThan(20)
+  })
+
+  it('starts L2 and L3 on the Sun–Jupiter line', () => {
+    const a = anglesAfter(0)
+    expect(a['L2 (unstable)']).toBeCloseTo(0, 6)
+    expect(Math.abs(a['L3 (unstable)'])).toBeCloseTo(180, 6)
+  })
+})

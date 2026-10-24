@@ -1,4 +1,5 @@
 import type { PlanetConfig, StarConfig, SystemConfig } from './setup'
+import { EARTH_MASS } from './units'
 
 export interface Preset {
   name: string
@@ -21,6 +22,23 @@ const star = (s: Partial<StarConfig> & Pick<StarConfig, 'name' | 'mass' | 'radiu
   node: 0,
   ...s,
 })
+
+/** Jupiter for the Lagrange point demo: M⊕, AU, and the mass ratio μ = m / (M☉ + m). */
+const JUPITER_MASS = 317.8
+const JUPITER_DISTANCE = 5.2
+const JUPITER_MU = (JUPITER_MASS * EARTH_MASS) / (1 + JUPITER_MASS * EARTH_MASS)
+
+/**
+ * A massless body at distance `r` (AU) from the Sun and `angle` degrees ahead of Jupiter, moving with the
+ * Sun–Jupiter line as at a Lagrange point. That takes speed ω·r relative to the Sun, where ω is Jupiter's
+ * angular speed. Planets start at periapsis, so the speed is set through the eccentricity: vis-viva at
+ * periapsis gives 1 + e = (r / a_J)³ / (1 − μ). Points that need less than circular speed (L1, and L3 by
+ * 0.04%) get a circular orbit, the closest a periapsis start can come.
+ */
+function coRotating(name: string, r: number, angle: number): PlanetConfig {
+  const e = Math.max(0, (r / JUPITER_DISTANCE) ** 3 / (1 - JUPITER_MU) - 1)
+  return planet({ name, mass: 1e-6, radius: 0.5, distance: r / (1 - e), eccentricity: e, angle })
+}
 
 export const PRESETS: Preset[] = [
   {
@@ -86,6 +104,25 @@ export const PRESETS: Preset[] = [
         planet({ name: 'Inclined 30°', mass: 10, radius: 2.5, distance: 2, angle: 90, inclination: 30 }),
         planet({ name: 'Polar', mass: 50, radius: 6, distance: 3.5, angle: 45, inclination: 90, node: 45 }),
         planet({ name: 'Retrograde', mass: 5, radius: 2, distance: 5.5, eccentricity: 0.2, angle: 200, inclination: 150, node: 120 }),
+      ],
+    },
+  },
+  {
+    // Centre on Jupiter to watch from the frame that turns with it. L4 and L5 hold for good and the nearby
+    // Trojans swing around them; L3 drifts off after a few orbits and L2 within one. The L2 and L3 distances
+    // solve the circular restricted three-body problem for Jupiter's μ. L1 (4.853 AU) needs less than circular
+    // speed, which a body starting at periapsis can't have, so it is left out.
+    name: 'Lagrange points (Sun–Jupiter)',
+    config: {
+      stars: [star({ name: 'Sun', mass: 1, radius: 1 })],
+      planets: [
+        planet({ name: 'Jupiter', mass: JUPITER_MASS, radius: 11.21, distance: JUPITER_DISTANCE }),
+        coRotating('L2 (unstable)', 5.5628, 0),
+        coRotating('L3 (unstable)', 5.1971, 180),
+        coRotating('L4', JUPITER_DISTANCE, 60),
+        coRotating('L5', JUPITER_DISTANCE, -60),
+        coRotating('Trojan near L4', JUPITER_DISTANCE, 72),
+        coRotating('Trojan near L5', JUPITER_DISTANCE, -48),
       ],
     },
   },
