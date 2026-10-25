@@ -15,7 +15,7 @@ interface Props {
   onLoad: (config: SystemConfig, preset: boolean) => void
   /** True while a built-in system is loaded: the form can't be edited until it is copied. */
   readOnly: boolean
-  /** Makes the loaded built-in system an editable copy. */
+  /** Unlocks the loaded built-in system, once Copy to edit has saved it as a copy. */
   onCopy: () => void
   /** Body id whose card is highlighted (the followed body). Ids count the stars first, then the planets. */
   selected: number | null
@@ -72,19 +72,9 @@ export function ConfigPanel({ config, onChange, onApply, onLoad, readOnly, onCop
     <div className="config" ref={scrollBox}>
       {/* Pinned, so loading, saving and adding bodies stay reachable while the list of bodies scrolls. */}
       <section className="config-top" ref={pinnedTop}>
-        <SystemLibrary config={config} onLoad={onLoad} readOnly={readOnly} />
-        {/* A built-in system offers only Copy to edit; adding bodies waits until it is copied. */}
-        {readOnly ? (
-          <div className="field">
-            <span className="field-label">Built-in system: read-only</span>
-            {/* In a pair row on its own, so it is the same size as the other buttons. */}
-            <div className="button-pair">
-              <button type="button" title="Make an editable copy of this system" onClick={onCopy}>
-                Copy to edit
-              </button>
-            </div>
-          </div>
-        ) : (
+        <SystemLibrary config={config} onLoad={onLoad} readOnly={readOnly} onCopy={onCopy} />
+        {/* Hidden for a built-in system, which offers Copy to edit instead (in SystemLibrary). */}
+        {!readOnly && (
           <div className="field">
             <span className="field-label">Add a body</span>
             <div className="button-pair">
