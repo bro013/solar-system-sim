@@ -19,6 +19,7 @@ import {
   STARFIELD_POINT_SIZE,
   STATS_INTERVAL_MS,
   TOP_INSET,
+  turn,
   ZOOM_STEP,
   type CameraView,
   type OrbitPreview,
@@ -299,6 +300,14 @@ export default function SimulationView3D(props: ViewProps) {
       const { pos, radius, info, n } = sim.system
       const fi = p.follow === null ? -1 : info.findIndex((b) => b.id === p.follow)
       const origin: Vec3 = fi >= 0 ? [pos[3 * fi], pos[3 * fi + 1], pos[3 * fi + 2]] : [0, 0, 0]
+      // Turning with a body: everything is rotated about the barycentre's vertical axis so that body keeps its
+      // direction; the camera stays put, so it is as if the camera turned with the body.
+      const spin = p.camera.turning(sim, p.rotateWith)
+      /** Scene position of a point at simulation coordinates relative to the origin, turned if turning. */
+      const toView = (target: THREE.Vector3, x: number, y: number, z: number, angle = spin?.now ?? 0) => {
+        if (angle) [x, y] = turn(x, y, angle)
+        return toScene(target, x, y, z)
+      }
       if (placedRevision !== p.camera.revision) {
         place(sim, origin, p.camera.get())
         placedRevision = p.camera.revision
@@ -335,7 +344,7 @@ export default function SimulationView3D(props: ViewProps) {
         const o = bodies.get(info[i].id)
         if (!o) continue
         alive.add(info[i].id)
-        toScene(o.mesh.position, pos[3 * i] - origin[0], pos[3 * i + 1] - origin[1], pos[3 * i + 2] - origin[2])
+        toView(o.mesh.position, pos[3 * i] - origin[0], pos[3 * i + 1] - origin[1], pos[3 * i + 2] - origin[2])
         // Same apparent size as in the 2D view: convert the on-screen radius back to scene units at this distance.
         const pxPerAU = focal / Math.max(o.mesh.position.distanceTo(camera.position), 1e-12)
         const r = displayRadius(radius[i], pxPerAU) / pxPerAU
@@ -370,10 +379,15 @@ export default function SimulationView3D(props: ViewProps) {
         line.visible = at !== null
         // The label renderer checks each object's own visibility, not its parent's.
         cross.visible = line.visible
-        if (at) toScene(line.position, at[0] - origin[0], at[1] - origin[1], at[2] - origin[2])
+        if (at) toView(line.position, at[0] - origin[0], at[1] - origin[1], at[2] - origin[2])
+        // A turn about the simulation's z axis is a turn about the scene's y axis by the same angle.
+        line.rotation.y = spin?.now ?? 0
       }
 
       const refId = fi >= 0 ? info[fi].id : null
+      // Turning trails are already turned by the body's angle at each sample (see forEachTrailPoint).
+      const rotId = spin ? p.rotateWith : null
+      const trailAngle = spin?.trail ?? 0
       for (const [id, o] of bodies) {
         o.trail.visible = p.showTrails
         if (!p.showTrails) continue
@@ -386,13 +400,13 @@ export default function SimulationView3D(props: ViewProps) {
             o.trail.geometry.setAttribute('position', new THREE.BufferAttribute(bigger, 3))
           }
           // Relative trails are already centred on the followed body; absolute ones are shifted like the bodies.
-          if (refId === null) toScene(v, x - origin[0], y - origin[1], z - origin[2])
-          else toScene(v, x, y, z)
+          if (refId === null) toView(v, x - origin[0], y - origin[1], z - origin[2], trailAngle)
+          else toView(v, x, y, z, trailAngle)
           o.trailPositions[3 * count] = v.x
           o.trailPositions[3 * count + 1] = v.y
           o.trailPositions[3 * count + 2] = v.z
           count++
-        })
+        }, rotId)
         o.trail.geometry.setDrawRange(0, count)
         o.trail.geometry.attributes.position.needsUpdate = true
       }

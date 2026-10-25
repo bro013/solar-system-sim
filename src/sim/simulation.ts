@@ -94,28 +94,40 @@ export class Simulation {
 
   /**
    * Calls `point` for each drawn trail point of body `id`, oldest first. With `refId`, positions are
-   * relative to that body at the same moment. Points are thinned on fixed ticks so they don't shimmer.
+   * relative to that body at the same moment. With `rotId`, each point is also turned about the z axis by
+   * minus the angle of body `rotId` (seen from the origin) at that same moment: the frame that turns with
+   * that body, in which it stays on the +x axis. Points are thinned on fixed ticks so they don't shimmer.
    */
-  forEachTrailPoint(id: number, refId: number | null, point: (x: number, y: number, z: number) => void) {
+  forEachTrailPoint(id: number, refId: number | null, point: (x: number, y: number, z: number) => void, rotId: number | null = null) {
     let len = Math.min(this.trailCount, this.trailLength[id])
     let stride = this.trailStride[id]
-    if (refId !== null && refId !== id) {
-      // Motion relative to the reference also contains the reference's own orbit, so sample at least as
-      // finely as its trail, and keep to a few of its orbits so the loops stay readable.
-      stride = Math.min(stride, this.trailStride[refId])
-      len = Math.min(len, RELATIVE_TRAIL_FACTOR * this.trailLength[refId])
+    for (const frame of [refId, rotId]) {
+      if (frame === null || frame === id) continue
+      // Motion relative to (or turning with) another body also contains that body's own orbit, so sample at
+      // least as finely as its trail, and keep to a few of its orbits so the loops stay readable.
+      stride = Math.min(stride, this.trailStride[frame])
+      len = Math.min(len, RELATIVE_TRAIL_FACTOR * this.trailLength[frame])
     }
     if (len < 2) return
     const newest = this.ticks - 1
+    const trail = this.trail
     const visit = (t: number) => {
       const base = (t % this.trailCapacity) * this.bodyCount * 3
       const b = base + 3 * id
-      if (refId === null) {
-        point(this.trail[b], this.trail[b + 1], this.trail[b + 2])
-      } else {
+      let x = trail[b], y = trail[b + 1], z = trail[b + 2]
+      if (refId !== null) {
         const r = base + 3 * refId
-        point(this.trail[b] - this.trail[r], this.trail[b + 1] - this.trail[r + 1], this.trail[b + 2] - this.trail[r + 2])
+        x -= trail[r]
+        y -= trail[r + 1]
+        z -= trail[r + 2]
       }
+      if (rotId !== null) {
+        const r = base + 3 * rotId
+        const phi = Math.atan2(trail[r + 1], trail[r])
+        const c = Math.cos(phi), s = Math.sin(phi)
+        ;[x, y] = [x * c + y * s, y * c - x * s]
+      }
+      point(x, y, z)
     }
     const oldest = this.ticks - len
     for (let t = Math.ceil(oldest / stride) * stride; t < newest; t += stride) visit(t)

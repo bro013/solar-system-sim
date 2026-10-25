@@ -14,6 +14,7 @@ import {
   STARFIELD_POINT_SIZE,
   STATS_INTERVAL_MS,
   TOP_INSET,
+  turn,
   ZOOM_STEP,
   type CameraView,
   type ScreenBody,
@@ -113,10 +114,15 @@ export function SimulationCanvas(props: ViewProps) {
       const { cx, cy, scale } = view
       const sx = (x: number) => w / 2 + (x - origin[0] - cx) * scale
       const sy = (y: number) => (h + TOP_INSET) / 2 - (y - origin[1] - cy) * scale
+      // Turning with a body: everything is rotated about the barycentre (the origin) so that body keeps its direction.
+      const spin = p.camera.turning(sim, p.rotateWith)
+      const turnNow = (x: number, y: number): [number, number] => (spin ? turn(x, y, spin.now) : [x, y])
 
       if (p.showTrails) {
         // When following a body, trails are drawn relative to it, then placed around its current position.
+        // When turning with one, each point is turned by that body's angle at the time (see forEachTrailPoint).
         const refId = fi >= 0 ? info[fi].id : null
+        const rotId = spin ? p.rotateWith : null
         ctx.lineWidth = 1
         ctx.globalAlpha = 0.45
         for (let i = 0; i < n; i++) {
@@ -124,6 +130,7 @@ export function SimulationCanvas(props: ViewProps) {
           ctx.beginPath()
           let first = true
           sim.forEachTrailPoint(info[i].id, refId, (x, y) => {
+            if (spin) [x, y] = turn(x, y, spin.trail)
             if (refId !== null) {
               x += origin[0]
               y += origin[1]
@@ -131,7 +138,7 @@ export function SimulationCanvas(props: ViewProps) {
             if (first) ctx.moveTo(sx(x), sy(y))
             else ctx.lineTo(sx(x), sy(y))
             first = false
-          })
+          }, rotId)
           ctx.stroke()
         }
         ctx.globalAlpha = 1
@@ -146,8 +153,9 @@ export function SimulationCanvas(props: ViewProps) {
           ctx.strokeStyle = orbit.color
           ctx.beginPath()
           orbit.path.forEach(([x, y], k) => {
-            if (k === 0) ctx.moveTo(sx(host[0] + x), sy(host[1] + y))
-            else ctx.lineTo(sx(host[0] + x), sy(host[1] + y))
+            const [px, py] = turnNow(host[0] + x, host[1] + y)
+            if (k === 0) ctx.moveTo(sx(px), sy(py))
+            else ctx.lineTo(sx(px), sy(py))
           })
           ctx.stroke()
         }
@@ -155,7 +163,8 @@ export function SimulationCanvas(props: ViewProps) {
         for (const orbit of p.previewOrbits) {
           const host = hostPosition(sim, orbit.host)
           if (!host) continue
-          const x = sx(host[0] + orbit.centre[0]), y = sy(host[1] + orbit.centre[1])
+          const [centreX, centreY] = turnNow(host[0] + orbit.centre[0], host[1] + orbit.centre[1])
+          const x = sx(centreX), y = sy(centreY)
           const s = PREVIEW_CROSS_SIZE
           ctx.strokeStyle = orbit.color
           ctx.beginPath()
@@ -176,7 +185,8 @@ export function SimulationCanvas(props: ViewProps) {
       ctx.font = '12px system-ui, sans-serif'
       const drawn: ScreenBody[] = []
       for (let i = 0; i < n; i++) {
-        const x = sx(pos[3 * i]), y = sy(pos[3 * i + 1])
+        const [bx, by] = turnNow(pos[3 * i], pos[3 * i + 1])
+        const x = sx(bx), y = sy(by)
         const r = displayRadius(radius[i], scale)
         if (x < -50 - r || y < -50 - r || x > w + 50 + r || y > h + 50 + r) continue
         drawn.push({ id: info[i].id, x, y, r })

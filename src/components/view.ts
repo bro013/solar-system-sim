@@ -37,6 +37,31 @@ export class SharedCamera {
     return this.changes
   }
 
+  /** Body the turning frame was last started for, and its angle then. */
+  private turningId: number | null = null
+  private turningStart = 0
+
+  /**
+   * The rotation about the z axis for this frame, when turning with body `rotateWith` (else null, also once that
+   * body is gone). `now` turns current positions: the body keeps the angle it had when chosen, so the view
+   * starts turning from where it is instead of jumping. `trail` turns trail points, which the simulation has
+   * already turned by minus the body's angle at each sample. Shared, so 2D and 3D agree after a switch.
+   */
+  turning(sim: Simulation, rotateWith: number | null): { now: number; trail: number } | null {
+    const i = rotateWith === null ? -1 : sim.system.info.findIndex((b) => b.id === rotateWith)
+    if (i < 0) {
+      this.turningId = null
+      return null
+    }
+    const { pos } = sim.system
+    const angle = Math.atan2(pos[3 * i + 1], pos[3 * i])
+    if (this.turningId !== rotateWith) {
+      this.turningId = rotateWith
+      this.turningStart = angle
+    }
+    return { now: this.turningStart - angle, trail: this.turningStart }
+  }
+
   /** Makes the view in use fit the whole system on its next frame. */
   reset() {
     this.view = null
@@ -48,6 +73,12 @@ export class SharedCamera {
     if (this.view) this.view = { ...this.view, cx: 0, cy: 0 }
     this.changes++
   }
+}
+
+/** (x, y) turned by `angle` radians about the origin, counter-clockwise. */
+export function turn(x: number, y: number, angle: number): [number, number] {
+  const c = Math.cos(angle), s = Math.sin(angle)
+  return [x * c - y * s, x * s + y * c]
 }
 
 /** Props shared by the 2D and 3D views. Each view drives the simulation while it is mounted. */
@@ -62,8 +93,13 @@ export interface ViewProps {
   showStars: boolean
   /** Body id to keep centred, or null for the system barycentre. */
   follow: number | null
+  /**
+   * Body id to turn the view with, centred on the barycentre: everything is rotated about the z axis so this
+   * body keeps the direction it had when chosen. Null when not turning; never set together with `follow`.
+   */
+  rotateWith: number | null
   onStats: (stats: Stats) => void
-  /** A body was double-clicked or double-tapped, or empty space (null). */
+  /** A body was double-clicked or double-tapped, or empty space (null). App decides whether to follow or turn. */
   onSelect: (id: number | null) => void
   /** Orbits edited in the form but not applied yet. */
   previewOrbits: OrbitPreview[]

@@ -34,6 +34,8 @@ export default function App() {
   const [showLabels, setShowLabels] = useState(true)
   const [showStars, setShowStars] = useState(true)
   const [follow, setFollow] = useState<number | null>(null)
+  /** Body the view turns with, centred on the barycentre; never set together with `follow`. */
+  const [rotateWith, setRotateWith] = useState<number | null>(null)
   const [stats, setStats] = useState<Stats | null>(null)
   const [view, setView] = useState<'2d' | '3d'>('2d')
   const viewportRef = useRef<HTMLElement>(null)
@@ -50,7 +52,7 @@ export default function App() {
   }, [camera, sim])
   useEffect(() => {
     camera.recentre()
-  }, [camera, follow])
+  }, [camera, follow, rotateWith])
 
   // Follow the browser's state too, since Esc leaves fullscreen without going through the button.
   useEffect(() => {
@@ -70,10 +72,21 @@ export default function App() {
   const dirty = config !== applied
   const yearsPerSecond = 10 ** speedLog
 
-  /** Following a body (by double-clicking it or from Centre on) brings its card in the side panel into focus; null is the barycentre. */
-  const select = (id: number | null) => {
-    setFollow(id)
+  /**
+   * Picks what the view centres on: the barycentre (null), a body to follow, or a body to turn with (the
+   * barycentre stays in the centre and the view rotates so that body keeps its direction). Choosing a body
+   * brings its card in the side panel into focus.
+   */
+  const frame = (mode: 'follow' | 'rotate', id: number | null) => {
+    setFollow(mode === 'follow' ? id : null)
+    setRotateWith(mode === 'rotate' ? id : null)
     if (id !== null) setFocusBody({ id })
+  }
+
+  /** Double-clicking a planet turns the view with it; a star is followed, as turning with it shows little. */
+  const select = (id: number | null) => {
+    const kind = sim.system.info.find((b) => b.id === id)?.kind
+    frame(kind === 'planet' ? 'rotate' : 'follow', id)
   }
 
   const viewProps = {
@@ -85,6 +98,7 @@ export default function App() {
     showLabels,
     showStars,
     follow,
+    rotateWith,
     onStats: setStats,
     onSelect: select,
     previewOrbits,
@@ -94,6 +108,7 @@ export default function App() {
     setSim(new Simulation(next))
     setApplied(next)
     setFollow(null)
+    setRotateWith(null)
     setStats(null)
     if (pausedForEdit) {
       setRunning(true)
@@ -168,7 +183,7 @@ export default function App() {
           onLoad={load}
           readOnly={presetLoaded}
           onCopy={() => setPresetLoaded(false)}
-          selected={follow}
+          selected={follow ?? rotateWith}
           focus={focusBody}
         />
         <div className="apply-bar">
@@ -252,13 +267,28 @@ export default function App() {
           </label>
           <label>
             Centre on{' '}
-            <select value={follow ?? ''} onChange={(e) => select(e.target.value === '' ? null : +e.target.value)}>
+            <select
+              value={follow !== null ? `follow:${follow}` : rotateWith !== null ? `rotate:${rotateWith}` : ''}
+              onChange={(e) => {
+                const [mode, id] = e.target.value.split(':')
+                frame(mode === 'rotate' ? 'rotate' : 'follow', id === undefined ? null : +id)
+              }}
+            >
               <option value="">Barycentre</option>
-              {sim.system.info.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
+              <optgroup label="Follow">
+                {sim.system.info.map((b) => (
+                  <option key={b.id} value={`follow:${b.id}`}>
+                    {b.name}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Barycentre, turning with">
+                {sim.system.info.map((b) => (
+                  <option key={b.id} value={`rotate:${b.id}`}>
+                    ↻ {b.name}
+                  </option>
+                ))}
+              </optgroup>
             </select>
           </label>
           <button type="button" onClick={() => sim.clearTrails()}>

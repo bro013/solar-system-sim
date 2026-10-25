@@ -62,3 +62,26 @@ describe('trails', () => {
     expect(trail(sim, id('Earth')).length).toBe(0)
   })
 })
+
+describe('trails in a frame turning with a body', () => {
+  const lagrange = PRESETS.find((p) => p.name.startsWith('Lagrange'))!.config
+  const sim = new Simulation(lagrange)
+  // Two Jupiter orbits.
+  for (let i = 0; i < 24; i++) sim.advance(1, 1)
+  const id = (name: string) => sim.system.info.find((b) => b.name === name)!.id
+  const angles = (bodyId: number) => {
+    const out: number[] = []
+    sim.forEachTrailPoint(bodyId, null, (x, y) => out.push((Math.atan2(y, x) * 180) / Math.PI), id('Jupiter'))
+    return out
+  }
+
+  it('keeps the body it turns with on the +x axis', () => {
+    const a = angles(id('Jupiter'))
+    expect(a.length).toBeGreaterThan(50)
+    for (const deg of a) expect(Math.abs(deg)).toBeLessThan(1e-6)
+  })
+
+  it('shows a body at L4 standing still, 60° ahead', () => {
+    for (const deg of angles(id('L4'))) expect(deg).toBeCloseTo(60, 0)
+  })
+})
