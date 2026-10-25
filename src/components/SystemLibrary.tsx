@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { PRESETS } from '../physics/presets'
 import { parseProfile, profileFileName, ProfileError, serializeProfile } from '../physics/profile'
 import type { SystemConfig } from '../physics/setup'
-import { SavedSystems, STORAGE_KEY } from '../sim/savedSystems'
+import { SavedSystems, STORAGE_KEY, type SavedRevision } from '../sim/savedSystems'
 
 interface Props {
   config: SystemConfig
@@ -12,6 +12,12 @@ interface Props {
   readOnly: boolean
   /** Unlocks the loaded built-in system for editing, once Copy to edit has saved it as a copy. */
   onCopy: () => void
+}
+
+/** A revision's save time, to the second, so several saves in a minute can be told apart. */
+function formatSavedAt(iso: string) {
+  const date = new Date(iso)
+  return Number.isNaN(date.getTime()) ? 'unknown time' : date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'medium' })
 }
 
 function download(fileName: string, text: string) {
@@ -41,6 +47,8 @@ export function SystemLibrary({ config, onLoad, readOnly, onCopy }: Props) {
     name: PRESETS[0].name,
     config,
   }))
+  /** Whether the list of the loaded saved system's revisions is open. */
+  const [showRevisions, setShowRevisions] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
 
   // Pick up systems saved or deleted in other tabs.
@@ -58,16 +66,22 @@ export function SystemLibrary({ config, onLoad, readOnly, onCopy }: Props) {
     setActive(activeName)
     setSaveName(null)
     setMessage(null)
+    setShowRevisions(false)
   }
 
-  /** Runs a storage action, then shows `done` (or nothing), or the error if it failed. */
-  const run = (action: () => void, done: string | null) => {
+  /**
+   * Runs a storage action, then shows `done` (or nothing), or the error if it failed. Returns the action's
+   * result, or undefined if it failed.
+   */
+  const run = <T,>(action: () => T, done: string | null): T | undefined => {
     try {
-      action()
+      const result = action()
       setSaved(store.list())
       setMessage(done ? { error: false, text: done } : null)
+      return result
     } catch (e) {
       setMessage({ error: true, text: (e as Error).message })
+      return undefined
     }
   }
 
@@ -77,11 +91,39 @@ export function SystemLibrary({ config, onLoad, readOnly, onCopy }: Props) {
   const replacing = saved.some((s) => s.name === trimmed)
   const defaultSaveName = readOnly ? `Copy of ${shown.name}` : (active ?? config.stars[0]?.name ?? 'My system')
 
-  /** Save: overwrites the loaded saved system straight away. Anything not saved yet is given a name first. */
+  /**
+   * Save: adds the form as a new revision of the loaded saved system straight away. Anything not saved yet is
+   * given a name first.
+   */
   const save = () => {
     if (!savedActive) return setSaveName(defaultSaveName)
-    run(() => store.save(savedActive, config), `Saved “${savedActive}”.`)
+    const added = run(() => store.save(savedActive, config), null)
+    if (added === undefined) return
+    setMessage({
+      error: false,
+      text: added ? `Saved a new revision of “${savedActive}”.` : `No changes since the last revision of “${savedActive}”.`,
+    })
     setShown({ value: `saved:${savedActive}`, name: savedActive, config })
+  }
+
+  /** The loaded saved system's revisions, newest first; only read from storage while the list is open. */
+  const revisions = showRevisions && savedActive ? store.revisions(savedActive) : []
+
+  /** Deletes one revision of the loaded saved system, after asking. The form is left as it is. */
+  const deleteRevision = (revision: SavedRevision) => {
+    if (!savedActive || !window.confirm(`Delete the revision of “${savedActive}” from ${formatSavedAt(revision.savedAt)}?`)) return
+    run(() => store.deleteRevision(savedActive, revision.savedAt), null)
+  }
+
+  /**
+   * Loads a revision into the form and runs it. An older one is listed with its time; pressing Save then
+   * makes it the latest revision again, so no revision is ever overwritten.
+   */
+  const loadRevision = (revision: SavedRevision, latest: boolean) => {
+    if (!savedActive) return
+    const name = latest ? savedActive : `${savedActive} (${formatSavedAt(revision.savedAt)})`
+    load(revision.config, latest ? `saved:${savedActive}` : 'revision', name, savedActive)
+    setShowRevisions(true)
   }
 
   /** Stores the form under the typed name. For Copy to edit, this saved copy is what unlocks the form. */
@@ -207,7 +249,7 @@ export function SystemLibrary({ config, onLoad, readOnly, onCopy }: Props) {
                 !store.available
                   ? 'This browser is blocking local storage'
                   : savedActive
-                    ? `Save the changes to “${savedActive}”`
+                    ? `Save the form as a new revision of “${savedActive}”`
                     : 'Save the system in the form in this browser under a name'
               }
               onClick={save}
@@ -218,9 +260,9 @@ export function SystemLibrary({ config, onLoad, readOnly, onCopy }: Props) {
               type="button"
               className="danger"
               disabled={!savedActive}
-              title={savedActive ? `Delete “${savedActive}” from this browser` : 'Load a saved system to delete it'}
+              title={savedActive ? `Delete “${savedActive}” and all its revisions from this browser` : 'Load a saved system to delete it'}
               onClick={() => {
-                if (!savedActive || !window.confirm(`Delete “${savedActive}” from this browser?`)) return
+                if (!savedActive || !window.confirm(`Delete “${savedActive}” and all its revisions from this browser?`)) return
                 run(() => store.delete(savedActive), null)
                 setActive(null)
               }}
@@ -228,6 +270,43 @@ export function SystemLibrary({ config, onLoad, readOnly, onCopy }: Props) {
               Delete
             </button>
           </div>
+          <div className="button-pair">
+            <button
+              type="button"
+              disabled={!savedActive}
+              aria-expanded={showRevisions && savedActive !== null}
+              title={savedActive ? `Every saved revision of “${savedActive}”` : 'Load a saved system to see its revisions'}
+              onClick={() => setShowRevisions(!showRevisions)}
+            >
+              {showRevisions && savedActive ? 'Hide revisions' : 'Revisions'}
+            </button>
+          </div>
+          {showRevisions && savedActive && (
+            <ol className="revisions" aria-label={`Revisions of ${savedActive}`}>
+              {revisions.map((r, k) => (
+                <li key={`${r.savedAt}-${k}`}>
+                  <span>
+                    {formatSavedAt(r.savedAt)}
+                    {k === 0 && <span className="revision-tag">latest</span>}
+                  </span>
+                  <span className="revision-actions">
+                    <button type="button" className="small" title="Load this revision into the form and run it" onClick={() => loadRevision(r, k === 0)}>
+                      Load
+                    </button>
+                    <button
+                      type="button"
+                      className="small danger"
+                      disabled={revisions.length < 2}
+                      title={revisions.length < 2 ? 'The only revision; Delete above removes the whole system' : 'Delete this revision'}
+                      onClick={() => deleteRevision(r)}
+                    >
+                      Delete
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
         </div>
       )}
       {!readOnly && saveForm}

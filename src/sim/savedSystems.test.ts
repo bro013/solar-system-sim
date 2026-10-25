@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { PRESETS } from '../physics/presets'
-import { SavedSystems, STORAGE_KEY } from './savedSystems'
+import { MAX_REVISIONS, SavedSystems, STORAGE_KEY } from './savedSystems'
 
 function memoryStorage(initial: Record<string, string> = {}) {
   const data = new Map(Object.entries(initial))
@@ -71,5 +71,79 @@ describe('saved systems', () => {
       },
     })
     expect(() => full.save('x', solar)).toThrow('full or blocked')
+  })
+})
+
+describe('revisions', () => {
+  const tilted = PRESETS[4].config
+
+  it('keeps every save of a name as a revision, newest first', () => {
+    const saved = new SavedSystems(memoryStorage())
+    saved.save('Mine', solar, new Date('2026-01-01T00:00:00Z'))
+    saved.save('Mine', kepler, new Date('2026-01-02T00:00:00Z'))
+    saved.save('Mine', tilted, new Date('2026-01-03T00:00:00Z'))
+    const revisions = saved.revisions('Mine')
+    expect(revisions.map((r) => r.savedAt)).toEqual(['2026-01-03T00:00:00.000Z', '2026-01-02T00:00:00.000Z', '2026-01-01T00:00:00.000Z'])
+    expect(revisions.map((r) => r.config)).toEqual([tilted, kepler, solar])
+    // The list still shows one system, at its latest revision.
+    expect(saved.list()).toHaveLength(1)
+    expect(saved.list()[0].config).toEqual(tilted)
+  })
+
+  it('does not add a revision when nothing changed', () => {
+    const saved = new SavedSystems(memoryStorage())
+    saved.save('Mine', solar, new Date('2026-01-01T00:00:00Z'))
+    expect(saved.save('Mine', structuredClone(solar), new Date('2026-01-02T00:00:00Z'))).toBe(false)
+    expect(saved.revisions('Mine').map((r) => r.savedAt)).toEqual(['2026-01-01T00:00:00.000Z'])
+  })
+
+  it('keeps at most MAX_REVISIONS, dropping the oldest', () => {
+    const saved = new SavedSystems(memoryStorage())
+    for (let k = 0; k < MAX_REVISIONS + 5; k++) {
+      saved.save('Mine', { ...solar, planets: solar.planets.slice(0, 1).map((p) => ({ ...p, mass: k + 1 })) }, new Date(Date.UTC(2026, 0, 1, 0, k)))
+    }
+    const revisions = saved.revisions('Mine')
+    expect(revisions).toHaveLength(MAX_REVISIONS)
+    expect(revisions[0].config.planets[0].mass).toBe(MAX_REVISIONS + 5)
+    expect(revisions.at(-1)!.config.planets[0].mass).toBe(6)
+  })
+
+  it('reads systems saved before revisions existed', () => {
+    const storage = memoryStorage()
+    const saved = new SavedSystems(storage)
+    saved.save('Old', solar, new Date('2026-01-01T00:00:00Z'))
+    const entries = JSON.parse(storage.data.get(STORAGE_KEY)!)
+    delete entries[0].history
+    storage.data.set(STORAGE_KEY, JSON.stringify(entries))
+    expect(saved.revisions('Old')).toHaveLength(1)
+    saved.save('Old', kepler, new Date('2026-01-02T00:00:00Z'))
+    expect(saved.revisions('Old').map((r) => r.config)).toEqual([kepler, solar])
+  })
+
+  it('deletes single revisions, the latest falling back to the one before', () => {
+    const saved = new SavedSystems(memoryStorage())
+    saved.save('Mine', solar, new Date('2026-01-01T00:00:00Z'))
+    saved.save('Mine', kepler, new Date('2026-01-02T00:00:00Z'))
+    saved.save('Mine', tilted, new Date('2026-01-03T00:00:00Z'))
+
+    expect(saved.deleteRevision('Mine', '2026-01-02T00:00:00.000Z')).toBe(true)
+    expect(saved.revisions('Mine').map((r) => r.config)).toEqual([tilted, solar])
+
+    expect(saved.deleteRevision('Mine', '2026-01-03T00:00:00.000Z')).toBe(true)
+    expect(saved.revisions('Mine').map((r) => r.config)).toEqual([solar])
+    expect(saved.list()[0]).toMatchObject({ savedAt: '2026-01-01T00:00:00.000Z', config: solar })
+
+    // The only revision stays; deleting the system is what removes it.
+    expect(saved.deleteRevision('Mine', '2026-01-01T00:00:00.000Z')).toBe(false)
+    expect(saved.revisions('Mine')).toHaveLength(1)
+    expect(saved.deleteRevision('Mine', 'no such time')).toBe(false)
+  })
+
+  it('deletes a system with all its revisions', () => {
+    const saved = new SavedSystems(memoryStorage())
+    saved.save('Mine', solar)
+    saved.save('Mine', kepler)
+    saved.delete('Mine')
+    expect(saved.revisions('Mine')).toEqual([])
   })
 })
