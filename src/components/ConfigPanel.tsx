@@ -72,32 +72,42 @@ export function ConfigPanel({ config, onChange, onApply, onLoad, readOnly, onCop
     <div className="config" ref={scrollBox}>
       {/* Pinned, so loading, saving and adding bodies stay reachable while the list of bodies scrolls. */}
       <section className="config-top" ref={pinnedTop}>
-        <SystemLibrary config={config} onLoad={onLoad} readOnly={readOnly} onCopy={onCopy} />
-        <div className="grid2">
-          <button
-            type="button"
-            disabled={readOnly || stars.length >= MAX_STARS}
-            title={stars.length >= MAX_STARS ? `At most ${MAX_STARS} stars` : 'Add a star'}
-            onClick={addStar}
-          >
-            Star +
-          </button>
-          <button
-            type="button"
-            disabled={readOnly || planets.length >= MAX_PLANETS}
-            title={planets.length >= MAX_PLANETS ? `At most ${MAX_PLANETS} planets` : 'Add a planet'}
-            onClick={addPlanet}
-          >
-            Planet +
-          </button>
-        </div>
+        <SystemLibrary config={config} onLoad={onLoad} readOnly={readOnly} />
+        {/* A built-in system offers only Copy to edit; adding bodies waits until it is copied. */}
+        {readOnly ? (
+          <div className="field">
+            <span className="field-label">Built-in system: read-only</span>
+            {/* In a pair row on its own, so it is the same size as the other buttons. */}
+            <div className="button-pair">
+              <button type="button" title="Make an editable copy of this system" onClick={onCopy}>
+                Copy to edit
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="field">
+            <span className="field-label">Add a body</span>
+            <div className="button-pair">
+              <button
+                type="button"
+                disabled={stars.length >= MAX_STARS}
+                title={stars.length >= MAX_STARS ? `At most ${MAX_STARS} stars` : 'Add a star'}
+                onClick={addStar}
+              >
+                Star +
+              </button>
+              <button
+                type="button"
+                disabled={planets.length >= MAX_PLANETS}
+                title={planets.length >= MAX_PLANETS ? `At most ${MAX_PLANETS} planets` : 'Add a planet'}
+                onClick={addPlanet}
+              >
+                Planet +
+              </button>
+            </div>
+          </div>
+        )}
       </section>
-
-      <p className="hint">
-        <b>Angle</b>: direction of periapsis (where the body starts). <b>Inclination</b>: tilt from the reference plane;
-        above 90° the orbit is retrograde. <b>Node</b>: direction where the orbit rises through the plane. Tilts show in the
-        3D view; the 2D view looks straight down on the plane.
-      </p>
 
       {/* A disabled fieldset disables every field and button in the cards at once. */}
       <fieldset className="bodies" disabled={readOnly}>
