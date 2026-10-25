@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PRESETS } from '../physics/presets'
+import { emptySystem, PRESETS } from '../physics/presets'
 import { Simulation } from './simulation'
 
 function trail(sim: Simulation, id: number, refId: number | null = null) {
@@ -83,5 +83,16 @@ describe('trails in a frame turning with a body', () => {
 
   it('shows a body at L4 standing still, 60° ahead', () => {
     for (const deg of angles(id('L4'))) expect(deg).toBeCloseTo(60, 0)
+  })
+})
+
+describe('an empty system', () => {
+  it('runs with its lone star and reports no energy drift', () => {
+    const sim = new Simulation(emptySystem())
+    sim.advance(1, 1)
+    const stats = sim.stats()
+    expect(stats.bodies).toBe(1)
+    expect(stats.energyDrift).toBe(0)
+    expect(Number.isFinite(stats.dt)).toBe(true)
   })
 })

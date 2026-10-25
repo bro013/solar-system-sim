@@ -128,6 +128,11 @@ export const PRESETS: Preset[] = [
   },
 ]
 
+/** A system to start from scratch: one Sun-like star and no planets (a system needs at least one star). */
+export function emptySystem(): SystemConfig {
+  return { stars: [defaultStar(0)], planets: [] }
+}
+
 export function defaultStar(index: number, previous?: StarConfig): StarConfig {
   return star({ name: `Star ${index + 1}`, mass: 1, radius: 1, distance: index === 0 ? 0 : Math.max(10, (previous?.distance ?? 0) * 3) })
 }

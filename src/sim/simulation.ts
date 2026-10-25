@@ -144,7 +144,8 @@ export class Simulation {
       time: this.system.time,
       bodies: this.system.n,
       dt: this.dt,
-      energyDrift: Math.abs((this.system.totalEnergy() - this.e0) / this.e0),
+      // A lone body has no energy at all (e0 = 0), and nothing that could drift.
+      energyDrift: this.e0 === 0 ? 0 : Math.abs((this.system.totalEnergy() - this.e0) / this.e0),
       throttled: this.throttled,
       mergers: this.mergers,
     }

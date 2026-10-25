@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { PRESETS } from '../physics/presets'
+import { emptySystem, PRESETS } from '../physics/presets'
 import { parseProfile, profileFileName, ProfileError, serializeProfile } from '../physics/profile'
 import type { SystemConfig } from '../physics/setup'
 import { SavedSystems, STORAGE_KEY, type SavedRevision } from '../sim/savedSystems'
@@ -89,7 +89,9 @@ export function SystemLibrary({ config, onLoad, readOnly, onCopy }: Props) {
   const savedActive = active !== null && saved.some((s) => s.name === active) ? active : null
   const trimmed = saveName?.trim() ?? ''
   const replacing = saved.some((s) => s.name === trimmed)
-  const defaultSaveName = readOnly ? `Copy of ${shown.name}` : (active ?? config.stars[0]?.name ?? 'My system')
+  const defaultSaveName = readOnly
+    ? `Copy of ${shown.name}`
+    : (active ?? (shown.value === 'new' ? shown.name : (config.stars[0]?.name ?? 'My system')))
 
   /**
    * Save: adds the form as a new revision of the loaded saved system straight away. Anything not saved yet is
@@ -213,6 +215,20 @@ export function SystemLibrary({ config, onLoad, readOnly, onCopy }: Props) {
           )}
         </select>
       </label>
+
+      <div className="field">
+        <span className="field-label">New system</span>
+        {/* In a pair row on its own, so it is the same size as the other buttons. */}
+        <div className="button-pair">
+          <button
+            type="button"
+            title="Start an empty system to build up: one star and no planets. It is not saved until you press Save…"
+            onClick={() => load(emptySystem(), 'new', 'New system', null)}
+          >
+            Create new
+          </button>
+        </div>
+      </div>
 
       <div className="field">
         <span className="field-label">JSON file</span>
