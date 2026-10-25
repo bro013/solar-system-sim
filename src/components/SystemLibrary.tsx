@@ -6,8 +6,12 @@ import { SavedSystems, STORAGE_KEY } from '../sim/savedSystems'
 
 interface Props {
   config: SystemConfig
-  /** Replaces the form's contents and restarts the simulation with them. */
-  onLoad: (config: SystemConfig) => void
+  /** Replaces the form's contents and restarts the simulation with them; `preset` for a built-in system. */
+  onLoad: (config: SystemConfig, preset: boolean) => void
+  /** True while a built-in system is loaded, which can't be edited until it is copied. */
+  readOnly: boolean
+  /** Makes the loaded built-in system an editable copy. */
+  onCopy: () => void
 }
 
 function download(fileName: string, text: string) {
@@ -20,7 +24,7 @@ function download(fileName: string, text: string) {
 }
 
 /** Loading presets and saved systems, saving to browser storage, and JSON import/export. */
-export function SystemLibrary({ config, onLoad }: Props) {
+export function SystemLibrary({ config, onLoad, readOnly, onCopy }: Props) {
   const store = useMemo(() => new SavedSystems(), [])
   const [saved, setSaved] = useState(() => store.list())
   /** Name of the saved system last loaded or saved, so saving again overwrites it by default. */
@@ -49,7 +53,7 @@ export function SystemLibrary({ config, onLoad }: Props) {
   }, [store])
 
   const load = (config: SystemConfig, value: string, name: string, activeName: string | null, text: string | null) => {
-    onLoad(config)
+    onLoad(config, value.startsWith('preset:'))
     setShown({ value, name, config })
     setActive(activeName)
     setSaveName(null)
@@ -66,10 +70,21 @@ export function SystemLibrary({ config, onLoad }: Props) {
     }
   }
 
+  /** Unlocks the loaded built-in system as an unsaved, editable copy, listed as “Copy of …”. */
+  const copy = () => {
+    onCopy()
+    setShown({ value: 'copy', name: `Copy of ${shown.name}`, config })
+    setMessage(null)
+  }
+
   const trimmed = saveName?.trim() ?? ''
   const replacing = saved.some((s) => s.name === trimmed)
+  const defaultSaveName =
+    active ?? (shown.value === 'copy' ? shown.name : readOnly ? `Copy of ${shown.name}` : (config.stars[0]?.name ?? 'My system'))
   const submitSave = () => {
     if (!trimmed) return
+    // Saving a built-in system stores a copy of it, which can be edited like any saved system.
+    if (readOnly) onCopy()
     run(() => store.save(trimmed, config), `Saved “${trimmed}” in this browser.`)
     setShown({ value: `saved:${trimmed}`, name: trimmed, config })
     setActive(trimmed)
@@ -133,7 +148,7 @@ export function SystemLibrary({ config, onLoad }: Props) {
           type="button"
           disabled={!store.available}
           title={store.available ? 'Save the system in the form in this browser' : 'This browser is blocking local storage'}
-          onClick={() => setSaveName(active ?? config.stars[0]?.name ?? 'My system')}
+          onClick={() => setSaveName(defaultSaveName)}
         >
           Save…
         </button>
@@ -180,6 +195,15 @@ export function SystemLibrary({ config, onLoad }: Props) {
             Cancel
           </button>
         </form>
+      )}
+
+      {readOnly && (
+        <p className="hint saved-line">
+          Built-in system: read-only.
+          <button type="button" className="small" title="Make an editable copy of this system" onClick={copy}>
+            Copy to edit
+          </button>
+        </p>
       )}
 
       {message && <p className={message.error ? 'import-error' : 'hint'}>{message.text}</p>}

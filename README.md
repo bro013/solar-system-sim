@@ -24,7 +24,7 @@ npm run lint
 
 ## Saving and loading systems
 
-**Save…** keeps the system in the form in this browser (localStorage) under a name; saved systems appear under "Saved in this browser" in the Load system list, where they can be loaded again or deleted. **Export** downloads the system as a JSON file and **Import…** loads one back. Loading a system, or adding or removing a star or planet with the + and − buttons, restarts the simulation straight away; other edits in the form take effect when you press Apply. Saved systems use the same JSON format. Values use the same units as the form. Optional fields (`eccentricity`, `angle`, `inclination`, `node`, and `distance` for the first star) default to 0. A planet's `host` is a star index (0 = first star) or `"all"` for a circumbinary orbit.
+The built-in presets are read-only: **Copy to edit** turns the loaded preset into an editable copy, and saving a preset stores an editable copy too. **Save…** keeps the system in the form in this browser (localStorage) under a name; saved systems appear under "Saved in this browser" in the Load system list, where they can be loaded again or deleted. **Export** downloads the system as a JSON file and **Import…** loads one back. Loading a system, or adding or removing a star or planet with the + and − buttons, restarts the simulation straight away; other edits in the form take effect when you press Apply. Saved systems use the same JSON format. Values use the same units as the form. Optional fields (`eccentricity`, `angle`, `inclination`, `node`, and `distance` for the first star) default to 0. A planet's `host` is a star index (0 = first star) or `"all"` for a circumbinary orbit.
 
 ```json
 {

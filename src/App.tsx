@@ -22,6 +22,8 @@ function formatSpeed(yps: number) {
 
 export default function App() {
   const [config, setConfig] = useState<SystemConfig>(() => structuredClone(PRESETS[0].config))
+  /** A built-in system is loaded, so the form is read-only until it is copied. The app starts on one. */
+  const [presetLoaded, setPresetLoaded] = useState(true)
   const [applied, setApplied] = useState(config)
   const [sim, setSim] = useState(() => new Simulation(config))
   const [running, setRunning] = useState(true)
@@ -133,6 +135,11 @@ export default function App() {
     if (!validate(next).length) start(next)
   }
 
+  const load = (next: SystemConfig, preset: boolean) => {
+    setPresetLoaded(preset)
+    applyNow(next)
+  }
+
   return (
     <div className={panelOpen ? 'app' : 'app panel-hidden'}>
       {/* Hidden with CSS rather than unmounted, so the form and its messages are kept while it is closed. */}
@@ -154,7 +161,16 @@ export default function App() {
             ☰
           </button>
         </header>
-        <ConfigPanel config={config} onChange={edit} onApply={applyNow} selected={follow} focus={focusBody} />
+        <ConfigPanel
+          config={config}
+          onChange={edit}
+          onApply={applyNow}
+          onLoad={load}
+          readOnly={presetLoaded}
+          onCopy={() => setPresetLoaded(false)}
+          selected={follow}
+          focus={focusBody}
+        />
         <div className="apply-bar">
           {errors.length > 0 && (
             <ul className="errors">

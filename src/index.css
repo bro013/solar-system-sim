@@ -666,3 +666,16 @@ button.link {
   stroke: var(--accent);
   stroke-width: 1;
 }
+
+/* Wraps the body cards so a built-in system's form can be disabled in one go; no box of its own. */
+.bodies {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.bodies:disabled input,
+.bodies:disabled select {
+  opacity: 0.6;
+}
