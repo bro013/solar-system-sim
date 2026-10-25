@@ -262,6 +262,11 @@ button.primary {
   background: var(--bg);
 }
 
+/* Fullscreen shows just the view; Esc (or the browser's own control) leaves it and brings the toolbar back. */
+.viewport:fullscreen .toolbar {
+  display: none;
+}
+
 .sim-canvas {
   display: block;
   width: 100%;
