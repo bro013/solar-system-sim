@@ -13,6 +13,8 @@ npm run build                # tsc -b type-check, then vite build into dist/
 npm run lint                 # oxlint (config in .oxlintrc.json)
 ```
 
+Deployment: `infra/main.bicep` creates an Azure Static Web App (Free plan) and `public/staticwebapp.config.json` sets its routing and headers; the README's "Deploying to Azure" has the commands. `.github/workflows/deploy.yml` lints, tests, builds and uploads `dist/` on every push to `main`, using the `AZURE_STATIC_WEB_APPS_API_TOKEN` repository secret. Check the template with `az bicep build --file infra/main.bicep --stdout > /dev/null && az bicep lint --file infra/main.bicep`.
+
 Tests run in vitest's default Node environment (no jsdom), so only non-React code is tested. Code that touches browser APIs takes them as injectable dependencies (for example `SavedSystems` takes a `Storage`-like object, and the tests pass an in-memory one).
 
 ## Architecture

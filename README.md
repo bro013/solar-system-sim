@@ -37,6 +37,32 @@ The built-in presets are read-only: **Copy to edit** asks for a name and saves a
 
 The parser is in `src/physics/profile.ts`.
 
+## Deploying to Azure
+
+The app is static files, so it can run on an [Azure Static Web App](https://learn.microsoft.com/azure/static-web-apps/) on the Free plan. `infra/main.bicep` creates the app; `public/staticwebapp.config.json` (copied into `dist/` by the build) sends unknown paths to `index.html`, caches the hashed files in `assets/` for a year, and adds a few security headers.
+
+```bash
+az login
+az group create --name solar-system-sim --location westeurope
+az deployment group create --resource-group solar-system-sim --template-file infra/main.bicep
+# prints the site's URL as outputs.url
+
+npm run build
+token=$(az staticwebapp secrets list --name solar-system-sim --query properties.apiKey -o tsv)
+npx @azure/static-web-apps-cli deploy ./dist --deployment-token "$token" --env production
+```
+
+Pass `--parameters name=<name> location=<region>` to change the resource name or region (Static Web Apps can be created in `westus2`, `centralus`, `eastus2`, `westeurope` or `eastasia`; the content is served worldwide either way; the default is `eastus2`, since `westeurope` currently turns away new Static Web Apps for some subscriptions, and the resource group can stay in any region). To publish a new version by hand, run the last three commands again.
+
+### Automatic deployment
+
+`.github/workflows/deploy.yml` lints, tests, builds and deploys on every push to `main`, which includes merged pull requests (it can also be run by hand from the Actions tab). It needs the deployment token as a repository secret, set once after creating the app:
+
+```bash
+az staticwebapp secrets list --name solar-system-sim --query properties.apiKey -o tsv \
+  | gh secret set AZURE_STATIC_WEB_APPS_API_TOKEN
+```
+
 ## How it works
 
 - **Units:** internally everything is in AU, solar masses and years, so G = 4π². Input is converted in `src/physics/units.ts` and `setup.ts`.
